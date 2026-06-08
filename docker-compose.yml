@@ -1,0 +1,9 @@
+# 一键启动：docker compose up -d --build
+services:
+  nextcrm:
+    build: .
+    image: nextcrm:latest
+    container_name: nextcrm
+    ports:
+      - "8080:80" # 宿主机 8080 → 容器 80，按需修改
+    restart: unless-stopped

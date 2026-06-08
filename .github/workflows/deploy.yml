@@ -1,0 +1,42 @@
+name: Deploy NextCRM
+
+# 推送到部署分支即自动构建并 rsync 到服务器。
+# 需在仓库 Settings → Secrets and variables → Actions 配置：
+#   SSH_HOST        服务器地址，如 1.2.3.4
+#   SSH_USER        登录用户，如 deploy
+#   SSH_PORT        SSH 端口（可选，默认 22）
+#   SSH_PRIVATE_KEY 部署用私钥（建议单独生成一把，仅授权该用途）
+#   DEPLOY_PATH     远端静态目录，如 /var/www/nextcrm
+
+on:
+  push:
+    branches:
+      - claude/admiring-clarke-mZ979
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync to server
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.SSH_PORT || 22 }}" \
+            dist/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"

@@ -78,6 +78,42 @@ src/
   已应用条件以可移除标签条 `FilterChips` 展示；筛选 + Tab **可保存为视图**（`SavedViewBar`）
   一键复用。已接入 线索 / 客户 / 商机 / 合同 四个列表。
 
+## 部署
+
+纯前端站点（当前内置 Mock 数据，无需后端）。提供四种方式，任选其一：
+
+### 1) Docker（推荐）
+```bash
+docker compose up -d --build      # 宿主机 8080 → 容器 80
+# 或
+docker build -t nextcrm:latest .
+docker run -d -p 8080:80 --restart unless-stopped nextcrm:latest
+```
+镜像内置 `deploy/nginx.conf`（已含 SPA history 路由回退、gzip、静态资源强缓存）。
+
+### 2) 静态文件 + nginx
+```bash
+npm ci && npm run build           # 产出 dist/
+# 将 dist/ 上传到服务器，例如 /var/www/nextcrm
+# nginx 站点参考 deploy/nginx.conf，root 指向该目录后 reload
+```
+
+### 3) 一键 rsync 脚本
+```bash
+DEPLOY_HOST=user@1.2.3.4 DEPLOY_PATH=/var/www/nextcrm ./deploy/deploy.sh
+```
+本地构建并 `rsync --delete` 到服务器（需已配置 SSH 免密）。
+
+### 4) GitHub Actions 自动部署
+`.github/workflows/deploy.yml`：推送到部署分支即自动构建并 rsync。
+在仓库 Secrets 配置 `SSH_HOST / SSH_USER / SSH_PORT / SSH_PRIVATE_KEY / DEPLOY_PATH`。
+
+> 关键点：本应用用 React Router 6（history 模式），任何静态托管都**必须配置 SPA 回退**
+> （未命中文件的请求返回 `index.html`），否则刷新子路由会 404。`deploy/nginx.conf` 已处理。
+>
+> 接后端时：把 `deploy/nginx.conf` 中 `/api/` 反代段取消注释指向后端，并将
+> `src/api/crm.ts` 的 mock 换为真实 `fetch`。
+
 ## 与后端对接
 
 `src/api/client.ts` 封装了统一返回 `{ code, msg, data }` 与分页约定；
