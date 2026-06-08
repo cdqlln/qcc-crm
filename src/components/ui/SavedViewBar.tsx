@@ -8,6 +8,9 @@ export interface SavedView {
   name: string;
   scope: 'mine' | 'team';
   pinned?: boolean;
+  /** 视图绑定的筛选条件与 Tab（选中即应用） */
+  tab?: string;
+  filters?: Record<string, unknown>;
 }
 
 // §4.3 SavedViewBar：保存的筛选视图（我的/团队/置顶）

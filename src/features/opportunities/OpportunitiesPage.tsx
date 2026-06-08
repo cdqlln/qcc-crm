@@ -9,10 +9,13 @@ import { PageHeader, SearchInput } from '@/components/ui/PageHeader';
 import { Button, UserCell } from '@/components/ui/primitives';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { SavedViewBar, type SavedView } from '@/components/ui/SavedViewBar';
+import { FilterButton, FilterPanel, FilterChips, type FilterField } from '@/components/ui/FilterPanel';
 import { MoneyText } from '@/components/ui/MoneyText';
 import { TermTag } from '@/components/ui/TermTag';
+import { useTerm } from '@/hooks/useTerms';
+import { TERMS_BIZ } from '@/mock/terms';
 import { cn } from '@/lib/cn';
-import { userName } from '@/mock/org';
+import { MOCK_USERS, userName } from '@/mock/org';
 import { formatDate, daysUntil } from '@/lib/format';
 import { formatCompact } from '@/lib/money';
 import type { Opportunity } from '@/types';
@@ -29,9 +32,24 @@ export function OpportunitiesPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list');
   const [views, setViews] = useState(DEFAULT_VIEWS);
   const [activeView, setActiveView] = useState<string>();
+  const [filterOpen, setFilterOpen] = useState(false);
   const navigate = useNavigate();
   const openCreate = useCreate((s) => s.open);
+  const term = useTerm();
   const { id } = useParams();
+
+  const filterSchema: FilterField[] = [
+    { key: 'status', label: '当前阶段', type: 'multiselect', options: term.options(TERMS_BIZ.oppStage).map((t) => ({ label: t.name, value: t.termId })) },
+    { key: 'leaderId', label: '跟进人', type: 'select', options: MOCK_USERS.map((u) => ({ label: u.name, value: u.userId })) },
+    { key: 'estimatedAmount', label: '预计成交金额', type: 'numberRange' },
+    { key: 'expiryDate', label: '预计成交日期', type: 'dateRange' },
+  ];
+
+  const selectView = (vid: string) => {
+    setActiveView(vid);
+    const v = views.find((x) => x.id === vid);
+    if (v) q.applyView({ tab: v.tab, filters: v.filters });
+  };
 
   // 看板需要全量数据
   const { data: all } = useQuery({
@@ -71,6 +89,7 @@ export function OpportunitiesPage() {
         extra={
           <>
             <SearchInput value={q.keyword} onChange={q.setKeyword} placeholder="搜索商机 / 编号 / 客户" />
+            <FilterButton count={q.filterCount} onClick={() => setFilterOpen(true)} />
             <Button variant="primary" size="md" onClick={() => openCreate('opportunity')}>新建商机</Button>
           </>
         }
@@ -89,14 +108,21 @@ export function OpportunitiesPage() {
           <SavedViewBar
             views={views}
             active={activeView}
-            onSelect={setActiveView}
-            onSave={(name) => setViews((v) => [...v, { id: String(Date.now()), name, scope: 'mine' }])}
+            onSelect={selectView}
+            onSave={(name) =>
+              setViews((v) => [...v, { id: String(Date.now()), name, scope: 'mine', tab: q.tab, filters: q.filters }])
+            }
           />
         </div>
         <div className="text-sm text-text-weak">
           共 <b className="text-text">{q.total}</b> 条 · 预计成交 <b className="text-text">{formatCompact(String(totalAmount))}</b>
         </div>
       </div>
+      {q.filterCount > 0 && (
+        <div className="mb-3">
+          <FilterChips schema={filterSchema} value={q.filters} onChange={q.setFilters} />
+        </div>
+      )}
 
       {view === 'list' ? (
         <DataTable
@@ -114,6 +140,14 @@ export function OpportunitiesPage() {
       ) : (
         <KanbanBoard data={all?.list ?? []} onCard={(o) => navigate(`/opportunities/${o.opportunityId}`)} />
       )}
+
+      <FilterPanel
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        schema={filterSchema}
+        value={q.filters}
+        onApply={q.setFilters}
+      />
 
       {id && <OpportunityDrawer id={Number(id)} onClose={() => navigate('/opportunities')} />}
     </div>

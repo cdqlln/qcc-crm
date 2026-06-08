@@ -11,8 +11,11 @@ import { Button, UserCell } from '@/components/ui/primitives';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Tabs } from '@/components/ui/Tabs';
 import { SavedViewBar, type SavedView } from '@/components/ui/SavedViewBar';
+import { FilterButton, FilterPanel, FilterChips, type FilterField } from '@/components/ui/FilterPanel';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
-import { userName } from '@/mock/org';
+import { useTerm } from '@/hooks/useTerms';
+import { TERMS_BIZ } from '@/mock/terms';
+import { MOCK_USERS, userName } from '@/mock/org';
 import { formatDate } from '@/lib/format';
 import type { Customer } from '@/types';
 import { LeadDrawer } from './LeadDrawer';
@@ -34,11 +37,29 @@ export function LeadsPage() {
   const q = useListQuery<Customer>('leads', leadsApi.list);
   const [views, setViews] = useState(DEFAULT_VIEWS);
   const [activeView, setActiveView] = useState<string>();
+  const [filterOpen, setFilterOpen] = useState(false);
   const navigate = useNavigate();
   const { id } = useParams();
   const toast = useUI((s) => s.toast);
   const openCreate = useCreate((s) => s.open);
+  const term = useTerm();
   const qc = useQueryClient();
+
+  const opt = (biz: number) => term.options(biz).map((t) => ({ label: t.name, value: t.termId }));
+  const filterSchema: FilterField[] = [
+    { key: 'source', label: '线索来源', type: 'select', options: opt(TERMS_BIZ.source) },
+    { key: 'poolGroup', label: '线索分组', type: 'multiselect', options: opt(TERMS_BIZ.poolGroup) },
+    { key: 'currentTrackingStatus', label: '状态', type: 'multiselect', options: opt(TERMS_BIZ.leadStatus) },
+    { key: 'leaderId', label: '负责人', type: 'select', options: MOCK_USERS.map((u) => ({ label: u.name, value: u.userId })) },
+    { key: 'province', label: '省份', type: 'text', placeholder: '如：江苏省' },
+    { key: 'trackingUpdateDate', label: '最新跟进时间', type: 'dateRange' },
+  ];
+
+  const selectView = (id: string) => {
+    setActiveView(id);
+    const v = views.find((x) => x.id === id);
+    if (v) q.applyView({ tab: v.tab, filters: v.filters });
+  };
 
   const convert = async (rows: Customer[]) => {
     await Promise.all(rows.map((r) => leadsApi.convert(r.customerId)));
@@ -73,6 +94,7 @@ export function LeadsPage() {
         extra={
           <>
             <SearchInput value={q.keyword} onChange={q.setKeyword} placeholder="搜索线索名称 / 行业" />
+            <FilterButton count={q.filterCount} onClick={() => setFilterOpen(true)} />
             <Button size="md"><Upload size={14} />导入</Button>
             <Button size="md"><Download size={14} />导出</Button>
             <Button variant="primary" size="md" onClick={() => openCreate('lead')}>新建线索</Button>
@@ -83,13 +105,16 @@ export function LeadsPage() {
       <div className="mb-3 flex items-center justify-between gap-3">
         <Tabs items={TABS} value={q.tab} onChange={q.setTab} className="border-0" />
       </div>
-      <div className="mb-3">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <SavedViewBar
           views={views}
           active={activeView}
-          onSelect={setActiveView}
-          onSave={(name) => setViews((v) => [...v, { id: String(Date.now()), name, scope: 'mine' }])}
+          onSelect={selectView}
+          onSave={(name) =>
+            setViews((v) => [...v, { id: String(Date.now()), name, scope: 'mine', tab: q.tab, filters: q.filters }])
+          }
         />
+        <FilterChips schema={filterSchema} value={q.filters} onChange={q.setFilters} />
       </div>
 
       <DataTable
@@ -111,6 +136,14 @@ export function LeadsPage() {
           { label: '导出', icon: <Download size={13} />, onClick: () => toast('导出任务已创建', 'info') },
         ]}
         pagination={{ page: q.page, pageSize: q.pageSize, total: q.total, onChange: q.setPage }}
+      />
+
+      <FilterPanel
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        schema={filterSchema}
+        value={q.filters}
+        onApply={q.setFilters}
       />
 
       {id && <LeadDrawer id={Number(id)} onClose={() => navigate('/leads')} onConvert={convert} />}
