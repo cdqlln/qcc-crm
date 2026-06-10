@@ -1,5 +1,5 @@
+# 注意：dist 不在忽略清单中——deploy/Dockerfile.runtime 需要把宿主机构建好的 dist 打入镜像
 node_modules
-dist
 .git
 .github
 *.log
