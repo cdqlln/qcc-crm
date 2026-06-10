@@ -18,4 +18,6 @@ for f in "$DIR"/migrations/*.sql; do
 done
 echo "==> seed.sql"
 "${PSQL[@]}" -f "$DIR/seed.sql"
+echo "==> seed_auth.sql"
+"${PSQL[@]}" -f "$DIR/seed_auth.sql"
 echo "✅ 数据库结构与种子数据已就绪"

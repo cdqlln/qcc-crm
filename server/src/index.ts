@@ -14,13 +14,15 @@ import { tasksRouter } from './routes/tasks.js';
 import { targetsRouter } from './routes/targets.js';
 import { aiRouter } from './routes/ai.js';
 import { searchRouter } from './routes/search.js';
+import { authRouter } from './routes/auth.js';
+import { requireAuth } from './auth.js';
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 app.use(
   cors({
     origin: (process.env.CORS_ORIGIN ?? 'http://localhost:5173').split(','),
-    allowedHeaders: ['Content-Type', 'x-org-id', 'x-user-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-org-id', 'x-user-id'],
   }),
 );
 
@@ -33,8 +35,12 @@ app.get('/health', async (_req, res) => {
   }
 });
 
-// §2 统一前缀 /api/crm
+// 认证（公开）
+app.use('/api/auth', authRouter);
+
+// §2 统一前缀 /api/crm —— 全局守卫，所有业务接口需登录
 const api = express.Router();
+api.use(requireAuth);
 api.use(termsRouter);
 api.use(leadsRouter);
 api.use(customersRouter);

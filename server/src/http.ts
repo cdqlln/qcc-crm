@@ -34,10 +34,11 @@ export function parseList(req: Request): Required<Pick<ListBody, 'page' | 'pageS
   };
 }
 
-// 当前租户 / 用户（演示：来自 env 或请求头；生产应来自鉴权）
+// 当前租户 / 用户：优先取鉴权中间件注入的 req.user，兜底 env（仅无守卫场景）
 export function ctx(req: Request) {
+  const u = (req as any).user as { userId: number; orgId: number } | undefined;
   return {
-    orgId: Number(req.header('x-org-id') || process.env.DEFAULT_ORG_ID || 1),
-    userId: Number(req.header('x-user-id') || process.env.DEFAULT_USER_ID || 1),
+    orgId: u?.orgId ?? Number(process.env.DEFAULT_ORG_ID || 1),
+    userId: u?.userId ?? Number(process.env.DEFAULT_USER_ID || 1),
   };
 }

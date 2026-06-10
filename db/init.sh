@@ -10,4 +10,8 @@ for f in /migrations/*.sql; do
 done
 echo "==> 导入 seed.sql"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /seed.sql
+if [ -f /seed_auth.sql ]; then
+  echo "==> 导入 seed_auth.sql（登录账号）"
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /seed_auth.sql
+fi
 echo "==> 数据库初始化完成"

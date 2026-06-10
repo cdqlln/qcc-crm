@@ -17,6 +17,7 @@ services:
       # 容器首次初始化时，由 init.sh 依次执行 migrations 再导入 seed
       - ./migrations:/migrations:ro
       - ./seed.sql:/seed.sql:ro
+      - ./seed_auth.sql:/seed_auth.sql:ro
       - ./init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crm -d nextcrm"]

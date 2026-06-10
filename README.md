@@ -143,6 +143,17 @@ DATABASE_URL=postgres://crm:crm@localhost:5432/nextcrm ./db/apply.sh
 可配置枚举走 `term` 字典，固定枚举用 CHECK；名称检索用 pg_trgm GIN、标签用数组 GIN、
 催收/续约/待办用部分索引（均经 EXPLAIN 验证命中）。
 
+## 登录与鉴权
+
+- **账号密码登录** + **企业微信扫码 SSO**；后端 **JWT（access + refresh）+ 全局守卫**，
+  所有 `/api/crm` 接口强制鉴权，401 自动刷新或跳登录。
+- 演示账号：`admin / crm123456`（其余 `lina`、`wangfang`… 同密码）。
+- 企业微信：未配置企业凭据时进入**开发模拟**（扫码按钮直接以演示账号登录）；
+  生产填 `WECOM_CORP_ID / WECOM_AGENT_ID / WECOM_SECRET` 即走真实扫码（授权码流程，
+  按 `wecom_userid` 绑定系统用户）。
+- 前端：`/login` 页 + 全局路由守卫；令牌存于 localStorage，API 请求自动附带
+  `Authorization`，过期用 refresh 续期。Mock 模式同样需登录（内置演示账号）。
+
 ## 后端 API（Express + Postgres）
 
 `server/` 是按 `db/` 表结构实现的 L2C 接口层（Express + node-postgres），统一返回

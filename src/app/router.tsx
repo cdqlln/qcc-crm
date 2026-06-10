@@ -1,5 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { AppShell } from './AppShell';
+import { RequireAuth } from './RequireAuth';
+import { LoginPage } from '@/features/auth/LoginPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { TasksPage } from '@/features/tasks/TasksPage';
 import { LeadsPage } from '@/features/leads/LeadsPage';
@@ -22,7 +24,12 @@ import { SettingsPage } from '@/features/settings/SettingsPage';
 import { PlaceholderPage } from '@/features/settings/PlaceholderPage';
 
 export const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
   {
+    path: '/',
+    element: <RequireAuth />,
+    children: [
+      {
     path: '/',
     element: <AppShell />,
     children: [
@@ -54,6 +61,8 @@ export const router = createBrowserRouter([
       { path: 'approvals', element: <PlaceholderPage title="审批" /> },
       { path: 'qywx', element: <PlaceholderPage title="企微协同" /> },
       { path: '*', element: <PlaceholderPage title="页面不存在" /> },
+        ],
+      },
     ],
   },
 ]);

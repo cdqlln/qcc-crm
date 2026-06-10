@@ -20,21 +20,45 @@ import type {
   Tracking,
 } from '@/types';
 import type { SearchHit } from './mock';
+import { authStore, type Session } from '@/store/auth';
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
-const ORG = (import.meta.env.VITE_ORG_ID as string | undefined) ?? '1';
-const USER = (import.meta.env.VITE_USER_ID as string | undefined) ?? '1';
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+function authHeaders(): Record<string, string> {
+  const t = authStore.get().accessToken;
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+// 用刷新令牌换新令牌；失败返回 false
+async function tryRefresh(): Promise<boolean> {
+  const rt = authStore.get().refreshToken;
+  if (!rt) return false;
+  try {
+    const res = await fetch(`${BASE}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
+    });
+    const body = (await res.json()) as { code: number; data: Session };
+    if (body.code !== 0) return false;
+    authStore.get().setSession(body.data);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function req<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const res = await fetch(`${BASE}/api/crm${path}`, {
     ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      'x-org-id': ORG,
-      'x-user-id': USER,
-      ...(init?.headers ?? {}),
-    },
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...(init?.headers ?? {}) },
   });
+  // 令牌过期：刷新一次后重试，否则登出
+  if (res.status === 401) {
+    if (!retried && (await tryRefresh())) return req<T>(path, init, true);
+    authStore.clearAndRedirect();
+    throw new Error('未登录或登录已过期');
+  }
   if (!res.ok && res.status >= 500) throw new Error(`HTTP ${res.status}`);
   const body = (await res.json()) as { code: number; msg: string; data: T };
   if (body.code !== 0) throw new Error(body.msg || '请求失败');

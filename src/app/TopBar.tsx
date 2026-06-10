@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, ChevronDown, HelpCircle, Menu, Plus, Search } from 'lucide-react';
+import { Bell, ChevronDown, HelpCircle, LogOut, Menu, Plus, Search } from 'lucide-react';
 import { QUICK_CREATE } from './nav';
 import { useUI } from '@/store/ui';
 import { useCreate } from '@/store/create';
+import { useAuth } from '@/store/auth';
 import { tasksApi } from '@/api/crm';
-import { CURRENT_USER } from '@/mock/org';
 import { Avatar, CountBadge } from '@/components/ui/primitives';
 
 // §3.2 TopBar：Logo / CommandPalette 触发 / QuickCreate / 通知 / 帮助 / 用户
@@ -16,7 +16,15 @@ export function TopBar() {
   const setCommandOpen = useUI((s) => s.setCommandOpen);
   const navigate = useNavigate();
   const openCreate = useCreate((s) => s.open);
+  const user = useAuth((s) => s.user);
+  const clearAuth = useAuth((s) => s.clear);
   const [quickOpen, setQuickOpen] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
+
+  const logout = () => {
+    clearAuth();
+    navigate('/login', { replace: true });
+  };
 
   const runQuick = (item: (typeof QUICK_CREATE)[number]) => {
     if (item.entity) openCreate(item.entity);
@@ -90,10 +98,33 @@ export function TopBar() {
         <button className="rounded-md p-2 text-text-weak hover:bg-bg" title="帮助">
           <HelpCircle size={18} />
         </button>
-        <button className="ml-1 flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-bg">
-          <Avatar name={CURRENT_USER.name} size={28} />
-          <span className="text-sm text-text">{CURRENT_USER.name}</span>
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setUserOpen((v) => !v)}
+            onBlur={() => setTimeout(() => setUserOpen(false), 150)}
+            className="ml-1 flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-bg"
+          >
+            <Avatar name={user?.name ?? '用户'} size={28} />
+            <span className="text-sm text-text">{user?.name ?? '未登录'}</span>
+            <ChevronDown size={13} className="text-text-faint" />
+          </button>
+          {userOpen && (
+            <div className="absolute right-0 top-11 z-30 w-48 rounded-lg border border-border bg-surface py-1.5 shadow-card animate-fade">
+              <div className="border-b border-border px-3 pb-2 pt-1">
+                <div className="text-sm font-medium text-text">{user?.name}</div>
+                <div className="text-xs text-text-faint">
+                  {user?.depName ?? ''}{user?.username ? ` · ${user.username}` : ''}
+                </div>
+              </div>
+              <button
+                onMouseDown={logout}
+                className="flex w-full items-center gap-2 px-3 py-2 text-sm text-danger hover:bg-bg"
+              >
+                <LogOut size={15} /> 退出登录
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
