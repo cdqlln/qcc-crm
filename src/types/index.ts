@@ -75,6 +75,11 @@ export interface Customer {
   leaderId?: number; // via user_customer
   preLeaderId?: number;
   loseTime?: string;
+  claimAt?: string;
+  assignAt?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
   opportunityCount?: number;
   approval: ApprovalStatus;
   active: -1 | 0 | 1 | 2;

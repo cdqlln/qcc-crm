@@ -72,6 +72,36 @@ customersRouter.get(
   }),
 );
 
+// 写跟进记录（线索/客户共用）；可联动下次跟进 + 写待办（#5/#20/#23）
+customersRouter.post(
+  '/customers/:id/trackings',
+  ah(async (req, res) => {
+    const { orgId, userId } = ctx(req);
+    const cid = Number(req.params.id);
+    const comment = String(req.body?.comment || '').trim();
+    if (!comment) return fail(res, '请填写跟进内容');
+    const trackingType = req.body?.trackingType ? Number(req.body.trackingType) : null;
+    const nextDate = req.body?.nextTrackingDate || null;
+    const priority = req.body?.priorityLevel ? Number(req.body.priorityLevel) : 1;
+    const row = await one(
+      `INSERT INTO customer_tracking (organization_id, customer_id, business_type, tracking_type_term, comment, next_tracking_at, priority_level, created_by)
+       VALUES ($1,$2,1,$3,$4,$5,$6,$7) RETURNING *`,
+      [orgId, cid, trackingType, comment, nextDate, priority, userId],
+    );
+    await one(`UPDATE customer SET tracking_num = tracking_num + 1, tracking_update_at = now(), next_tracking_at=$2 WHERE customer_id=$1`, [cid, nextDate]);
+    // 有下次跟进时间 → 生成跟进计划待办（business_type=10）
+    if (nextDate && req.body?.createBacklog !== false) {
+      const cust = await one<{ name: string }>(`SELECT name FROM customer WHERE customer_id=$1`, [cid]);
+      await one(
+        `INSERT INTO back_log (organization_id, business_type, business_id, business_name, user_id, status, deadline_date, deadline_type)
+         VALUES ($1,10,$2,$3,$4,0,$5,2)`,
+        [orgId, cid, `跟进：${cust?.name ?? ''}`, userId, nextDate],
+      );
+    }
+    ok(res, mapTracking(row));
+  }),
+);
+
 // 客户历史报价单价（价格保护：同客户同产品的最近成交/报价单价，供新报价带入与提醒）
 customersRouter.get(
   '/customers/:id/last-quote-prices',

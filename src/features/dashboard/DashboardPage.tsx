@@ -12,8 +12,8 @@ import { cn } from '@/lib/cn';
 import { formatCompact } from '@/lib/money';
 import { useTerm } from '@/hooks/useTerms';
 import { TERMS_BIZ } from '@/mock/terms';
-import { userName, MOCK_USERS } from '@/mock/org';
-import { formatDate } from '@/lib/format';
+import { userName, MOCK_USERS, CURRENT_USER } from '@/mock/org';
+import { formatDate, dayjs } from '@/lib/format';
 
 const SCOPES = [
   { key: 'company', label: '全公司' },
@@ -35,18 +35,28 @@ export function DashboardPage() {
 
   const { data: counts = {} } = useQuery({ queryKey: ['task-counts'], queryFn: () => tasksApi.counts() });
 
-  // KPI
-  const newLeads = customers.filter((c) => c.category <= 2).length;
-  const newCustomers = customers.filter((c) => c.category >= 3).length;
-  const contractAmount = contracts.reduce((s, c) => s + Number(c.amount), 0);
-  const receivedAmount = contracts.reduce((s, c) => s + Number(c.receivedAmount), 0);
-  const outstanding = contracts.reduce((s, c) => s + Number(c.outstandingAmount), 0);
+  // 范围/时间筛选（#2：使右上角切换真实生效）
+  const deptUserIds = MOCK_USERS.filter((u) => u.depId === CURRENT_USER.depId).map((u) => u.userId);
+  const inScope = (leaderId?: number) =>
+    scope === 'company' ? true : scope === 'dept' ? deptUserIds.includes(leaderId ?? -1) : leaderId === CURRENT_USER.userId;
+  const start = dayjs().startOf(time === 'day' ? 'day' : time === 'week' ? 'week' : time === 'quarter' ? 'quarter' : 'month');
+  const inTime = (date?: string) => (date ? dayjs(date).isAfter(start) : true);
+  const fc = customers.filter((c) => inScope(c.leaderId));
+  const fo = opportunities.filter((o) => inScope(o.leaderId));
+  const fct = contracts.filter((c) => inScope(c.leaderId));
+
+  // KPI（叠加范围；"新增"类叠加时间）
+  const newLeads = fc.filter((c) => c.category <= 2 && inTime(c.createDate)).length;
+  const newCustomers = fc.filter((c) => c.category >= 3 && inTime(c.createDate)).length;
+  const contractAmount = fct.reduce((s, c) => s + Number(c.amount), 0);
+  const receivedAmount = fct.reduce((s, c) => s + Number(c.receivedAmount), 0);
+  const outstanding = fct.reduce((s, c) => s + Number(c.outstandingAmount), 0);
 
   const kpis = [
     { label: '新增线索', value: newLeads, icon: UserPlus, path: '/leads', delta: '+12%' },
     { label: '新增客户', value: newCustomers, icon: UserPlus, path: '/customers', delta: '+8%' },
-    { label: '商机数', value: opportunities.length, icon: Briefcase, path: '/opportunities', delta: '+5%' },
-    { label: '合同数', value: contracts.length, icon: Handshake, path: '/contracts', delta: '+3%' },
+    { label: '商机数', value: fo.length, icon: Briefcase, path: '/opportunities', delta: '+5%' },
+    { label: '合同数', value: fct.length, icon: Handshake, path: '/contracts', delta: '+3%' },
     { label: '合同额', value: formatCompact(String(contractAmount)), icon: FileText, path: '/contracts', delta: '+15%' },
     { label: '回款额', value: formatCompact(String(receivedAmount)), icon: Wallet, path: '/payments', delta: '+9%' },
     { label: '应收额', value: formatCompact(String(outstanding)), icon: HandCoins, path: '/payments', delta: '', warn: true },
@@ -57,7 +67,7 @@ export function DashboardPage() {
   const funnelOption = {
     color: CHART_COLORS,
     tooltip: { trigger: 'item' },
-    series: [{ type: 'funnel', left: '5%', width: '90%', label: { formatter: '{b}: {c}' }, data: stages.map((s) => ({ name: s.name, value: opportunities.filter((o) => o.status === s.termId).length })) }],
+    series: [{ type: 'funnel', left: '5%', width: '90%', label: { formatter: '{b}: {c}' }, data: stages.map((s) => ({ name: s.name, value: fo.filter((o) => o.status === s.termId).length })) }],
   };
 
   // 线索转化率仪表

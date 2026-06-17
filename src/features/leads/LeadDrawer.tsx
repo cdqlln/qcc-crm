@@ -1,15 +1,19 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowRightLeft, Phone } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowRightLeft, Briefcase, Phone } from 'lucide-react';
 import { customersApi, leadsApi } from '@/api/crm';
 import { Drawer } from '@/components/ui/Drawer';
 import { Tabs } from '@/components/ui/Tabs';
 import { Button, UserCell } from '@/components/ui/primitives';
 import { Descriptions } from '@/components/ui/Descriptions';
+import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
 import { AiPanel } from '@/components/ai/AiPanel';
 import { TableSkeleton } from '@/components/ui/states';
+import { useUI } from '@/store/ui';
+import { TERMS_BIZ } from '@/mock/terms';
 import { userName } from '@/mock/org';
 import { formatDate, fromNow } from '@/lib/format';
 import { useTerm } from '@/hooks/useTerms';
@@ -33,7 +37,16 @@ export function LeadDrawer({
 }) {
   const [tab, setTab] = useState('overview');
   const term = useTerm();
+  const toast = useUI((s) => s.toast);
+  const navigate = useNavigate();
   const { data: lead, isLoading } = useQuery({ queryKey: ['lead', id], queryFn: () => leadsApi.get(id) });
+
+  const toOpportunity = async () => {
+    const r = await leadsApi.toOpportunity(id);
+    toast('已转为商机', 'success');
+    onClose();
+    navigate(`/opportunities/${r.opportunityId}`);
+  };
 
   return (
     <Drawer
@@ -44,6 +57,7 @@ export function LeadDrawer({
       footer={
         lead && (
           <div className="flex justify-end gap-2">
+            <Button onClick={toOpportunity}><Briefcase size={14} />转商机</Button>
             <Button variant="primary" onClick={() => onConvert([lead])}>
               <ArrowRightLeft size={14} />转为客户（保留跟进）
             </Button>
@@ -85,12 +99,57 @@ export function LeadDrawer({
           { label: '电话', value: lead.phone },
           { label: '负责人', value: <UserCell name={userName(lead.leaderId)} /> },
           { label: '标签', value: <TermTags ids={lead.labels} /> },
-          { label: '掉保计时', value: lead.loseTime ? fromNow(lead.loseTime) : '—' },
+          { label: '领取时间', value: lead.claimAt ? formatDate(lead.claimAt) : '—' },
+          { label: '分配时间', value: lead.assignAt ? formatDate(lead.assignAt) : '—' },
+          { label: 'UTM 来源', value: [lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(' / ') || '—' },
           { label: '创建时间', value: formatDate(lead.createDate) },
         ]}
       />
     );
   }
+}
+
+// 写跟进（联动下次跟进 + 自动写待办）#5
+function FollowUpForm({ customerId, onDone }: { customerId: number; onDone: () => void }) {
+  const term = useTerm();
+  const toast = useUI((s) => s.toast);
+  const [comment, setComment] = useState('');
+  const [type, setType] = useState('');
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!comment.trim()) return toast('请填写跟进内容', 'error');
+    setBusy(true);
+    try {
+      await customersApi.createTracking(customerId, {
+        comment: comment.trim(),
+        trackingType: type ? Number(type) : undefined,
+        nextTrackingDate: next || undefined,
+      });
+      toast(next ? '跟进已记录，已生成下次跟进待办' : '跟进已记录', 'success');
+      setComment(''); setType(''); setNext('');
+      onDone();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '提交失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="mb-4 space-y-3 rounded-lg border border-border p-3">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="跟进方式">
+          <Select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">选择方式</option>
+            {term.options(TERMS_BIZ.followType).map((t) => <option key={t.termId} value={t.termId}>{t.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="下次跟进时间"><TextInput type="date" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
+      </div>
+      <Field label="跟进内容"><TextArea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="记录沟通要点…" /></Field>
+      <div className="flex justify-end"><Button variant="primary" onClick={submit} disabled={busy}>保存跟进</Button></div>
+    </div>
+  );
 }
 
 function ContactsTab({ customerId }: { customerId: number }) {
@@ -121,13 +180,23 @@ function ContactsTab({ customerId }: { customerId: number }) {
 
 function TrackingTab({ customerId }: { customerId: number }) {
   const term = useTerm();
+  const qc = useQueryClient();
   const { data = [], isLoading } = useQuery({
     queryKey: ['trackings', customerId],
     queryFn: () => customersApi.trackings(customerId),
   });
+  const onDone = () => {
+    qc.invalidateQueries({ queryKey: ['trackings', customerId] });
+    qc.invalidateQueries({ queryKey: ['lead', customerId] });
+    qc.invalidateQueries({ queryKey: ['task-counts'] });
+  };
   if (isLoading) return <TableSkeleton rows={4} cols={1} />;
-  if (data.length === 0) return <p className="py-8 text-center text-sm text-text-faint">暂无跟进记录</p>;
   return (
+    <>
+      <FollowUpForm customerId={customerId} onDone={onDone} />
+      {data.length === 0 ? (
+        <p className="py-8 text-center text-sm text-text-faint">暂无跟进记录</p>
+      ) : (
     <Timeline
       items={data.map((t) => ({
         id: t.trackingId,
@@ -144,5 +213,7 @@ function TrackingTab({ customerId }: { customerId: number }) {
         ),
       }))}
     />
+      )}
+    </>
   );
 }

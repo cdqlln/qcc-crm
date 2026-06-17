@@ -76,6 +76,48 @@ export const leadsApi = {
     customers.unshift(row);
     return delay(row);
   },
+  update: (id: number, input: Partial<Customer>) => {
+    const c = customers.find((x) => x.customerId === id);
+    if (c) Object.assign(c, input);
+    return delay(c);
+  },
+  claim: (ids: number[]) => {
+    const rows = customers.filter((c) => ids.includes(c.customerId));
+    rows.forEach((c) => { c.category = 1; c.leaderId = 1; c.currentTrackingStatus = 18; c.claimAt = dayjs().toISOString(); });
+    return delay(rows);
+  },
+  receive: (ids: number[]) => {
+    const rows = customers.filter((c) => ids.includes(c.customerId));
+    rows.forEach((c) => { c.currentTrackingStatus = 18; });
+    return delay(rows);
+  },
+  reject: (ids: number[]) => {
+    const rows = customers.filter((c) => ids.includes(c.customerId));
+    rows.forEach((c) => { c.currentTrackingStatus = 19; });
+    return delay(rows);
+  },
+  returnPool: (ids: number[]) => {
+    const rows = customers.filter((c) => ids.includes(c.customerId));
+    rows.forEach((c) => { c.category = 2; c.leaderId = undefined; c.currentTrackingStatus = 15; });
+    return delay(rows);
+  },
+  assign: (ids: number[], toUserId: number) => {
+    const rows = customers.filter((c) => ids.includes(c.customerId));
+    rows.forEach((c) => { c.category = 1; c.leaderId = toUserId; c.currentTrackingStatus = 16; c.assignAt = dayjs().toISOString(); });
+    return delay(rows);
+  },
+  toOpportunity: (id: number, input?: { name?: string; estimatedAmount?: string }) => {
+    const c = customers.find((x) => x.customerId === id);
+    if (c) { c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1; }
+    const oid = opportunities.reduce((m, o) => Math.max(m, o.opportunityId), 0) + 1;
+    const code = `OPP${dayjs().format('YYYY')}${String(oid).padStart(4, '0')}`;
+    opportunities.unshift({
+      opportunityId: oid, code, name: input?.name ?? `${c?.name ?? ''} 商机`, customerId: id, customerName: c?.name,
+      estimatedAmount: input?.estimatedAmount ?? '0', status: 30, allStayTime: 0, depId: 2, renewType: 1, additional: 1,
+      approval: -1, active: 1, leaderId: c?.leaderId, createDate: dayjs().toISOString(),
+    } as any);
+    return delay({ opportunityId: oid, code });
+  },
 };
 
 // ---------- 客户 §6.3 ----------
@@ -96,6 +138,17 @@ export const customersApi = {
         .filter((t) => t.customerId === customerId)
         .sort((a, b) => b.createDate.localeCompare(a.createDate)),
     ),
+  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number }) => {
+    const row: any = {
+      trackingId: nextId(trackings, 'trackingId'), customerId, businessType: 1, trackingType: input.trackingType,
+      comment: input.comment, nextTrackingDate: input.nextTrackingDate, priorityLevel: input.priorityLevel ?? 1,
+      createBy: 1, createDate: dayjs().toISOString(),
+    };
+    trackings.unshift(row);
+    const c = customers.find((x) => x.customerId === customerId);
+    if (c) { c.trackingNum = (c.trackingNum ?? 0) + 1; c.trackingUpdateDate = row.createDate; if (input.nextTrackingDate) c.nextTrackingDate = input.nextTrackingDate; }
+    return delay(row);
+  },
   lastQuotePrices: (customerId: number) => {
     const qids = new Set(quotations.filter((q) => q.customerId === customerId).map((q) => q.quotationId));
     const byProduct: Record<number, any> = {};

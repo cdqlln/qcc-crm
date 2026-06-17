@@ -1,8 +1,10 @@
 import dayjs from 'dayjs';
 import relativeTime from 'dayjs/plugin/relativeTime';
+import quarterOfYear from 'dayjs/plugin/quarterOfYear';
 import 'dayjs/locale/zh-cn';
 
 dayjs.extend(relativeTime);
+dayjs.extend(quarterOfYear);
 dayjs.locale('zh-cn');
 
 export function formatDate(value?: string | number | null, fmt = 'YYYY-MM-DD'): string {

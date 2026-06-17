@@ -79,6 +79,14 @@ export const leadsApi = {
   get: (id: number) => get<Customer>(`/leads/${id}`),
   convert: (id: number) => post<Customer>(`/leads/${id}/convert`),
   create: (input: Partial<Customer>) => post<Customer>('/leads', input),
+  update: (id: number, input: Partial<Customer>) => put<Customer>(`/leads/${id}`, input),
+  claim: (ids: number[]) => post<Customer[]>('/leads/claim', { ids }),
+  receive: (ids: number[]) => post<Customer[]>('/leads/receive', { ids }),
+  reject: (ids: number[]) => post<Customer[]>('/leads/reject', { ids }),
+  returnPool: (ids: number[]) => post<Customer[]>('/leads/return-pool', { ids }),
+  assign: (ids: number[], toUserId: number) => post<Customer[]>('/leads/assign', { ids, toUserId }),
+  toOpportunity: (id: number, input?: { name?: string; estimatedAmount?: string }) =>
+    post<{ opportunityId: number; code: string }>(`/leads/${id}/to-opportunity`, input ?? {}),
 };
 
 export const customersApi = {
@@ -86,6 +94,8 @@ export const customersApi = {
   get: (id: number) => get<Customer>(`/customers/${id}`),
   contacts: (customerId: number) => get<Contact[]>(`/customers/${customerId}/contacts`),
   trackings: (customerId: number) => get<Tracking[]>(`/customers/${customerId}/trackings`),
+  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number }) =>
+    post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
   lastQuotePrices: (customerId: number) =>
     get<{ productId: number; unitPrice: string; discountRate: string; code: string; quoteDate?: string }[]>(
