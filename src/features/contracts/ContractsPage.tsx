@@ -79,32 +79,45 @@ export function ContractsPage() {
   ];
 
   const columns: Column<Contract>[] = [
-    { key: 'code', header: '合同编号', render: (r) => <span className="font-medium text-primary">{r.code}</span> },
-    { key: 'name', header: '合同名称' },
-    { key: 'customerName', header: '客户' },
-    { key: 'labels', header: '客户标签', render: (r) => <TermTags ids={r.labels} /> },
-    { key: 'currency', header: '币种', render: (r) => currencySymbol(r.currency) },
-    { key: 'amount', header: '合同金额', numeric: true, sortable: true, render: (r) => <MoneyText value={r.amount} currency={r.currency} strong /> },
-    { key: 'receivedAmount', header: '已回款', numeric: true, render: (r) => <MoneyText value={r.receivedAmount} currency={r.currency} /> },
-    { key: 'outstandingAmount', header: '未回款', numeric: true, render: (r) => <MoneyText value={r.outstandingAmount} currency={r.currency} className="text-warning" /> },
-    { key: 'invoiceAmount', header: '开票额', numeric: true, render: (r) => <MoneyText value={r.invoiceAmount} currency={r.currency} /> },
+    // 合同名称 + 编号合并为一列（编号作副标题），节省横向空间、避免窄屏挤压
+    {
+      key: 'name',
+      header: '合同名称',
+      minWidth: 200,
+      truncate: 240,
+      render: (r) => (
+        <div className="min-w-0">
+          <div className="truncate font-medium text-text" title={r.name}>{r.name}</div>
+          <div className="truncate text-xs text-text-faint">{r.code}</div>
+        </div>
+      ),
+    },
+    { key: 'customerName', header: '客户', minWidth: 160, truncate: 200, render: (r) => <span title={r.customerName}>{r.customerName}</span> },
+    { key: 'labels', header: '客户标签', minWidth: 100, render: (r) => <TermTags ids={r.labels} /> },
+    { key: 'currency', header: '币种', minWidth: 56, render: (r) => currencySymbol(r.currency) },
+    { key: 'amount', header: '合同金额', numeric: true, minWidth: 110, sortable: true, render: (r) => <MoneyText value={r.amount} currency={r.currency} strong /> },
+    { key: 'receivedAmount', header: '已回款', numeric: true, minWidth: 100, render: (r) => <MoneyText value={r.receivedAmount} currency={r.currency} /> },
+    { key: 'outstandingAmount', header: '未回款', numeric: true, minWidth: 100, render: (r) => <MoneyText value={r.outstandingAmount} currency={r.currency} className="text-warning" /> },
+    { key: 'invoiceAmount', header: '开票额', numeric: true, minWidth: 100, render: (r) => <MoneyText value={r.invoiceAmount} currency={r.currency} /> },
     {
       key: 'receivedRate',
       header: '收款比例',
       width: 130,
+      minWidth: 130,
       render: (r) => <ProgressBar value={Number(r.receivedRate)} />,
     },
     {
       key: 'expiredDate',
       header: '到期日',
       numeric: true,
+      minWidth: 110,
       sortable: true,
       render: (r) => {
         const left = daysUntil(r.expiredDate);
         return <span className={cn('tabular-nums', left >= 0 && left <= 30 && 'font-medium text-warning')}>{formatDate(r.expiredDate)}</span>;
       },
     },
-    { key: 'status', header: '状态', render: (r) => <StatusTag {...STATUS[r.status]} /> },
+    { key: 'status', header: '状态', minWidth: 80, render: (r) => <StatusTag {...STATUS[r.status]} /> },
   ];
 
   return (

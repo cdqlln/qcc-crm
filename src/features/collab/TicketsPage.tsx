@@ -40,10 +40,10 @@ export function TicketsPage() {
   const toast = useUI((s) => s.toast);
 
   const columns: Column<Ticket>[] = [
-    { key: 'code', header: '工单号', render: (r) => <span className="font-medium text-primary">{r.code}</span> },
-    { key: 'title', header: '标题' },
-    { key: 'typeTerm', header: '类型', render: (r) => term.name(r.typeTerm) },
-    { key: 'customerName', header: '客户', render: (r) => r.customerName ?? '—' },
+    { key: 'code', header: '工单号', minWidth: 110, render: (r) => <span className="font-medium text-primary">{r.code}</span> },
+    { key: 'title', header: '标题', minWidth: 180, truncate: 260 },
+    { key: 'typeTerm', header: '类型', minWidth: 70, render: (r) => term.name(r.typeTerm) },
+    { key: 'customerName', header: '客户', minWidth: 140, truncate: 200, render: (r) => r.customerName ?? '—' },
     { key: 'priority', header: '优先级', render: (r) => <StatusTag {...PRIORITY[r.priority]} dot={false} /> },
     { key: 'assigneeName', header: '处理人', render: (r) => <UserCell name={r.assigneeName ?? userName(r.assigneeId)} /> },
     { key: 'status', header: '状态', render: (r) => <StatusTag {...STATUS[r.status]} /> },

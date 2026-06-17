@@ -10,9 +10,13 @@ export interface Column<T> {
   render?: (row: T) => React.ReactNode;
   align?: 'left' | 'right' | 'center';
   width?: number | string;
+  /** 列最小宽度（px），防止窄屏被压缩 */
+  minWidth?: number;
   sortable?: boolean;
   /** 数字列：等宽数字 + 右对齐 */
   numeric?: boolean;
+  /** 超长单行截断：true=默认 200px，或指定最大像素宽 */
+  truncate?: boolean | number;
 }
 
 export interface BulkAction<T> {
@@ -159,7 +163,7 @@ export function DataTable<T>({
                 {columns.map((col) => (
                   <th
                     key={col.key}
-                    style={{ width: col.width, textAlign: col.numeric ? 'right' : col.align ?? 'left' }}
+                    style={{ width: col.width, minWidth: col.minWidth, textAlign: col.numeric ? 'right' : col.align ?? 'left' }}
                     className={cn(
                       'whitespace-nowrap px-3 py-2.5 text-xs font-medium text-text-weak',
                       col.sortable && 'cursor-pointer select-none hover:text-text',
@@ -197,15 +201,27 @@ export function DataTable<T>({
                         />
                       </td>
                     )}
-                    {columns.map((col) => (
-                      <td
-                        key={col.key}
-                        style={{ textAlign: col.numeric ? 'right' : col.align ?? 'left' }}
-                        className={cn(rowH, 'px-3 align-middle text-text', col.numeric && 'tabular-nums')}
-                      >
-                        {col.render ? col.render(row) : ((row as Record<string, unknown>)[col.key] as React.ReactNode)}
-                      </td>
-                    ))}
+                    {columns.map((col) => {
+                      const maxW = col.truncate === true ? 200 : typeof col.truncate === 'number' ? col.truncate : undefined;
+                      const content = col.render
+                        ? col.render(row)
+                        : ((row as Record<string, unknown>)[col.key] as React.ReactNode);
+                      return (
+                        <td
+                          key={col.key}
+                          style={{ textAlign: col.numeric ? 'right' : col.align ?? 'left', minWidth: col.minWidth }}
+                          className={cn(rowH, 'whitespace-nowrap px-3 align-middle text-text', col.numeric && 'tabular-nums')}
+                        >
+                          {maxW != null ? (
+                            <div className="truncate" style={{ maxWidth: maxW }} title={typeof content === 'string' ? content : undefined}>
+                              {content}
+                            </div>
+                          ) : (
+                            content
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
