@@ -1,8 +1,13 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, FileCheck2, Languages, ListTree, Shield, SlidersHorizontal, Tags, Workflow } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Building2, FileCheck2, Languages, ListTree, Percent, Shield, SlidersHorizontal, Tags, Workflow } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { Card } from '@/components/ui/primitives';
+import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { useTermsMap } from '@/hooks/useTerms';
+import { quotationsApi } from '@/api/crm';
+import { useUI } from '@/store/ui';
+import type { DiscountPolicy } from '@/types';
 
 const ITEMS = [
   { icon: Building2, title: '组织 / 部门', desc: 'organization · department 部门树', path: '/settings' },
@@ -35,6 +40,8 @@ export function SettingsPage() {
           </Link>
         ))}
       </div>
+      <DiscountPolicyCard />
+
       <Card className="mt-4 p-4">
         <div className="text-sm font-medium text-text">已加载字典（terms）</div>
         <div className="mt-1 text-sm text-text-weak">
@@ -42,5 +49,55 @@ export function SettingsPage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+const LEVEL_NAME: Record<number, string> = { 25: 'A 级客户', 26: 'B 级客户', 27: 'C 级客户' };
+
+// 销售自主折扣上限（按客户分级）—— 询价单在此折扣内销售可自助出单，超出走审批
+function DiscountPolicyCard() {
+  const toast = useUI((s) => s.toast);
+  const { data, refetch } = useQuery({ queryKey: ['discount-policy'], queryFn: () => quotationsApi.discountPolicy() });
+  const [draft, setDraft] = useState<DiscountPolicy[]>([]);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (data) setDraft(data); }, [data]);
+
+  const setVal = (levelTermId: number, v: string) =>
+    setDraft((d) => d.map((p) => (p.levelTermId === levelTermId ? { ...p, maxDiscount: v } : p)));
+
+  const save = async () => {
+    setSaving(true);
+    try { await quotationsApi.updateDiscountPolicy(draft); await refetch(); toast('折扣政策已保存', 'success'); }
+    catch (e) { toast(e instanceof Error ? e.message : '保存失败', 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Card className="mt-4">
+      <CardHeader
+        title={<span className="flex items-center gap-2"><Percent size={16} className="text-primary" />询价折扣权限（按客户分级）</span>}
+        extra={<Button size="sm" variant="primary" onClick={save} disabled={saving}>保存</Button>}
+      />
+      <div className="p-4">
+        <p className="mb-3 text-sm text-text-weak">设置各分级客户「销售可自助出询价单」的最低折扣率（越小=可让利越大）。低于此值的报价需走审批。</p>
+        <div className="grid grid-cols-3 gap-4">
+          {draft.map((p) => (
+            <div key={p.levelTermId} className="rounded-lg border border-border p-3">
+              <div className="text-sm font-medium text-text">{LEVEL_NAME[p.levelTermId] ?? `分级 ${p.levelTermId}`}</div>
+              <div className="mt-2 flex items-center gap-2">
+                <input
+                  value={p.maxDiscount}
+                  onChange={(e) => setVal(p.levelTermId, e.target.value)}
+                  className="h-8 w-20 rounded border border-border px-2 text-right text-sm tabular-nums outline-none focus:border-primary"
+                />
+                <span className="text-xs text-text-faint">
+                  ≈ {(Number(p.maxDiscount) * 10).toFixed(1)} 折（{((1 - Number(p.maxDiscount)) * 100).toFixed(0)}% 让利内免审批）
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
   );
 }

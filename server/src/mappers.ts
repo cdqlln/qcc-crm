@@ -109,6 +109,8 @@ export const mapQuotation = (r: any) => ({
   grossProfit: r.gross_profit,
   grossProfitRate: r.gross_profit_rate,
   approval: r.approval,
+  customerConfirmed: r.customer_confirmed,
+  confirmedAt: r.confirmed_at,
 });
 
 export const mapQuotationProduct = (r: any) => ({
@@ -217,6 +219,7 @@ export const mapProduct = (r: any) => ({
   timeLimits: r.time_limits,
   kind: r.kind,
   deliveryType: r.delivery_type,
+  salesDiscount: r.sales_discount,
   active: r.active,
   freePricing: r.free_pricing,
   price: r.price,

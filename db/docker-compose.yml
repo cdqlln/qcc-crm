@@ -20,6 +20,7 @@ services:
       - ./seed_auth.sql:/seed_auth.sql:ro
       - ./seed_collab.sql:/seed_collab.sql:ro
       - ./seed_product.sql:/seed_product.sql:ro
+      - ./seed_discount.sql:/seed_discount.sql:ro
       - ./init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U crm -d nextcrm"]

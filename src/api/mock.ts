@@ -154,10 +154,53 @@ export const opportunitiesApi = {
 };
 
 // ---------- 报价 §6.5 ----------
+const mockDiscountPolicy = [
+  { levelTermId: 25, maxDiscount: '0.85' },
+  { levelTermId: 26, maxDiscount: '0.90' },
+  { levelTermId: 27, maxDiscount: '0.95' },
+];
+
 export const quotationsApi = {
   list: (p: ListParams) => paginate(quotations, p, ['name', 'code', 'customerName']),
   get: (id: number) => delay(quotations.find((q) => q.quotationId === id)),
   products: (quotationId: number) => delay(quotationProducts.filter((qp) => qp.quotationId === quotationId)),
+  discountPolicy: () => delay(mockDiscountPolicy),
+  updateDiscountPolicy: (policies: { levelTermId: number; maxDiscount: string }[]) => {
+    for (const p of policies) {
+      const ex = mockDiscountPolicy.find((x) => x.levelTermId === p.levelTermId);
+      if (ex) ex.maxDiscount = p.maxDiscount;
+      else mockDiscountPolicy.push({ ...p });
+    }
+    return delay(mockDiscountPolicy);
+  },
+  create: (input: any) => {
+    const id = quotations.reduce((m, q) => Math.max(m, q.quotationId), 0) + 1;
+    const cust = customers.find((c) => c.customerId === input.customerId);
+    const total = (input.lines ?? []).reduce((s: number, l: any) => s + Number(l.price) * Number(l.discountRate) * l.quantity, 0);
+    const cost = (input.lines ?? []).reduce((s: number, l: any) => s + Number(l.cost) * l.quantity, 0);
+    const amount = total * Number(input.orderDiscountRate ?? 1) + Number(input.otherCharges ?? 0) - Number(input.discount ?? 0);
+    const row: any = {
+      quotationId: id, code: `QT${new Date().getFullYear()}${String(id).padStart(4, '0')}`, version: 1,
+      name: input.name, customerId: input.customerId, customerName: cust?.name, opportunityId: input.opportunityId,
+      currency: input.currency ?? 'CNY', status: 0, quoteType: input.quoteType ?? 2,
+      total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0',
+      discount: input.discount ?? '0', amount: amount.toFixed(2), cost: cost.toFixed(2),
+      grossProfit: (amount - cost).toFixed(2), grossProfitRate: amount > 0 ? (((amount - cost) / amount) * 100).toFixed(1) : '0',
+      comDiscountRate: total > 0 ? ((amount / total) * 100).toFixed(1) : '0', approval: -1, customerConfirmed: false,
+    };
+    quotations.unshift(row);
+    return delay(row);
+  },
+  update: (id: number, input: any) => {
+    const q = quotations.find((x) => x.quotationId === id) as any;
+    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, discount: input.discount });
+    return delay(q);
+  },
+  confirm: (id: number) => {
+    const q = quotations.find((x) => x.quotationId === id) as any;
+    if (q) { q.customerConfirmed = true; q.status = 1; }
+    return delay(q);
+  },
 };
 
 // ---------- 合同 §6.6 ----------

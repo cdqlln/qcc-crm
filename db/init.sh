@@ -22,4 +22,8 @@ if [ -f /seed_product.sql ]; then
   echo "==> 导入 seed_product.sql（产品大类/阶梯价）"
   psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /seed_product.sql
 fi
+if [ -f /seed_discount.sql ]; then
+  echo "==> 导入 seed_discount.sql（折扣政策）"
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /seed_discount.sql
+fi
 echo "==> 数据库初始化完成"

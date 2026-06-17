@@ -169,6 +169,13 @@ export interface Quotation {
   grossProfit: string;
   grossProfitRate: string;
   approval: ApprovalStatus;
+  customerConfirmed?: boolean;
+  confirmedAt?: string;
+}
+
+export interface DiscountPolicy {
+  levelTermId: number;
+  maxDiscount: string; // 该分级销售自主折扣下限
 }
 
 export interface QuotationProduct {
@@ -304,6 +311,7 @@ export interface Product {
   timeLimits?: number; // 服务周期
   kind: 1 | 2; // 1数据 2产品
   deliveryType?: 1 | 2 | 3 | 4; // 1 API 2 离线数据包 3 账号 4 订阅
+  salesDiscount?: string; // 销售自主折扣下限（低于触发审批）
   active: boolean;
   freePricing: boolean;
   price: string;

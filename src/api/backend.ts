@@ -100,6 +100,12 @@ export const quotationsApi = {
   list: (p: ListParams) => list<Quotation>('/quotations/list', p),
   get: (id: number) => get<Quotation>(`/quotations/${id}`),
   products: (quotationId: number) => get<QuotationProduct[]>(`/quotations/${quotationId}/products`),
+  discountPolicy: () => get<import('@/types').DiscountPolicy[]>('/discount-policy'),
+  updateDiscountPolicy: (policies: import('@/types').DiscountPolicy[]) =>
+    put<import('@/types').DiscountPolicy[]>('/discount-policy', { policies }),
+  create: (input: unknown) => post<Quotation>('/quotations', input),
+  update: (id: number, input: unknown) => put<Quotation>(`/quotations/${id}`, input),
+  confirm: (id: number) => post<Quotation>(`/quotations/${id}/confirm`),
 };
 
 export const contractsApi = {

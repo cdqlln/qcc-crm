@@ -14,7 +14,7 @@ import { currencySymbol } from '@/lib/money';
 import type { Quotation } from '@/types';
 
 const STATUS: Record<number, { label: string; kind: 'info' | 'success' | 'danger' | 'neutral' }> = {
-  0: { label: '初始', kind: 'neutral' },
+  0: { label: '草稿', kind: 'neutral' },
   1: { label: '报价中', kind: 'info' },
   2: { label: '失效', kind: 'danger' },
   3: { label: '已生成合同', kind: 'success' },
