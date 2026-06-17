@@ -18,7 +18,7 @@ import { userName } from '@/mock/org';
 import { formatDateTime } from '@/lib/format';
 import type { ApprovalTask } from '@/types';
 
-const BIZ: Record<number, string> = { 1: '报价', 2: '合同', 3: '合同变更', 4: '回款单', 5: '发票', 6: '预授信', 7: '商机' };
+const BIZ: Record<number, string> = { 1: '报价', 2: '合同', 3: '合同变更', 4: '回款单', 5: '发票', 6: '预授信', 7: '商机', 8: '客户移交' };
 const STATUS: Record<number, { label: string; kind: 'warning' | 'danger' | 'success' }> = {
   2: { label: '进行中', kind: 'warning' },
   3: { label: '已驳回', kind: 'danger' },

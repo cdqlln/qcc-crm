@@ -87,6 +87,12 @@ export const customersApi = {
   contacts: (customerId: number) => get<Contact[]>(`/customers/${customerId}/contacts`),
   trackings: (customerId: number) => get<Tracking[]>(`/customers/${customerId}/trackings`),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
+  lastQuotePrices: (customerId: number) =>
+    get<{ productId: number; unitPrice: string; discountRate: string; code: string; quoteDate?: string }[]>(
+      `/customers/${customerId}/last-quote-prices`,
+    ),
+  transfer: (customerId: number, toUserId: number, reason: string) =>
+    post<{ status: number }>(`/customers/${customerId}/transfer`, { toUserId, reason }),
 };
 
 export const opportunitiesApi = {

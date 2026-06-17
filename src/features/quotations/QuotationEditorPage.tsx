@@ -12,6 +12,7 @@ import { useUI } from '@/store/ui';
 import { add, mul, rate, sub, d } from '@/lib/money';
 import { cn } from '@/lib/cn';
 import { PRODUCT_KIND, QUOTE_TYPE, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
+import { printQuotation } from './printQuotation';
 import type { Customer, Product, ProductTier } from '@/types';
 
 interface Line {
@@ -64,6 +65,14 @@ export function QuotationEditorPage() {
     enabled: !!effCustomerId,
   });
   const levelCap = policy.find((p) => p.levelTermId === customer?.level)?.maxDiscount ?? '0.95';
+
+  // 价格保护：该客户历史报价单价（同产品）
+  const { data: lastPrices = [] } = useQuery({
+    queryKey: ['last-prices', effCustomerId],
+    queryFn: () => customersApi.lastQuotePrices(effCustomerId!),
+    enabled: !!effCustomerId,
+  });
+  const lastPriceMap = new Map(lastPrices.map((p) => [p.productId, p.unitPrice]));
 
   if (!isNew && !seeded && existingLines.length > 0) {
     setLines(
@@ -176,7 +185,22 @@ export function QuotationEditorPage() {
         description="询价销售自助出单 · 报价/超权限折扣走审批 · 实时算价"
         extra={
           <>
-            <Button onClick={() => toast('已导出 PDF', 'success')}><FileDown size={14} />导出PDF</Button>
+            <Button
+              onClick={() => {
+                const okPrint = printQuotation({
+                  quoteType: Number(quoteType),
+                  code: existing?.code,
+                  customerName: customer?.name ?? existing?.customerName,
+                  date: existing?.quoteDate,
+                  currency: 'CNY',
+                  lines: calc.rows.map((r) => ({ productName: r.productName, spec: r.spec, quantity: r.quantity, price: r.price, discountRate: r.discountRate, salePrice: r.salePrice, subtotal: r.subtotal })),
+                  total: calc.total, orderDiscount, otherCharges, discount, amount: calc.amount,
+                });
+                if (!okPrint) toast('请允许弹出窗口以导出 PDF', 'error');
+              }}
+            >
+              <FileDown size={14} />导出PDF
+            </Button>
             <Button onClick={onSaveDraft} disabled={busy}><Save size={14} />保存草稿</Button>
             {canSelfIssue ? (
               <Button variant="primary" onClick={onConfirm} disabled={busy}><CheckCircle2 size={14} />确认出单</Button>
@@ -283,7 +307,15 @@ export function QuotationEditorPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-2 py-2 text-right tabular-nums">{r.salePrice}</td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        <div>{r.salePrice}</div>
+                        {lastPriceMap.has(r.productId) && (
+                          <div className={cn('text-[10px]', d(r.salePrice).lt(lastPriceMap.get(r.productId)!) ? 'text-danger' : 'text-text-faint')}>
+                            上次 {lastPriceMap.get(r.productId)}
+                            {d(r.salePrice).lt(lastPriceMap.get(r.productId)!) && ' ·低于历史'}
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2 py-2 text-right font-medium tabular-nums">{r.subtotal}</td>
                       <td className="px-2 py-2 text-right tabular-nums text-text-weak">{sub(r.subtotal, r.lineCost)}</td>
                       <td className="px-2 py-2 text-right"><button onClick={() => remove(r.id)} className="text-text-faint hover:text-danger"><Trash2 size={14} /></button></td>

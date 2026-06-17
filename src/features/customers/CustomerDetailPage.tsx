@@ -9,11 +9,15 @@ import {
   MapPin,
   PlusCircle,
   ShieldAlert,
+  UserCog,
 } from 'lucide-react';
 import { contracts, customersApi, opportunities, quotations } from '@/api/crm';
 import { Tabs } from '@/components/ui/Tabs';
 import { Button, Avatar, UserCell } from '@/components/ui/primitives';
 import { Card, CardHeader } from '@/components/ui/primitives';
+import { Dialog } from '@/components/ui/Dialog';
+import { Field, Select, TextArea } from '@/components/ui/form';
+import { MOCK_USERS } from '@/mock/org';
 import { Descriptions } from '@/components/ui/Descriptions';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
@@ -36,6 +40,7 @@ export function CustomerDetailPage() {
   const toast = useUI((s) => s.toast);
   const openCreate = useCreate((s) => s.open);
   const [tab, setTab] = useState('overview');
+  const [transferOpen, setTransferOpen] = useState(false);
   const term = useTerm();
 
   const { data: cust, isLoading } = useQuery({ queryKey: ['customer', cid], queryFn: () => customersApi.get(cid) });
@@ -87,6 +92,7 @@ export function CustomerDetailPage() {
             <Button onClick={() => openCreate('opportunity', { customerId: cid })}><PlusCircle size={14} />建商机</Button>
             <Button onClick={() => navigate('/quotations/new')}><FilePlus2 size={14} />建报价</Button>
             <Button onClick={() => toast('已签到', 'success')}><MapPin size={14} />签到</Button>
+            <Button onClick={() => setTransferOpen(true)}><UserCog size={14} />移交</Button>
           </div>
         </div>
       </Card>
@@ -195,7 +201,48 @@ export function CustomerDetailPage() {
           )}
         </div>
       </Card>
+
+      {transferOpen && (
+        <TransferDialog customerId={cid} currentLeaderId={cust.leaderId} onClose={() => setTransferOpen(false)} />
+      )}
     </div>
+  );
+}
+
+function TransferDialog({ customerId, currentLeaderId, onClose }: { customerId: number; currentLeaderId?: number; onClose: () => void }) {
+  const toast = useUI((s) => s.toast);
+  const [toUserId, setToUserId] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    if (!toUserId) return toast('请选择接收人', 'error');
+    setBusy(true);
+    try {
+      await customersApi.transfer(customerId, Number(toUserId), reason);
+      toast('移交申请已提交，进入交接审批', 'success');
+      onClose();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '提交失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open onClose={onClose} title="客户负责人移交" width="w-[460px]"
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={submit} disabled={busy}>提交交接审批</Button></>}>
+      <div className="space-y-4">
+        <p className="rounded-md bg-primary-weak/60 px-3 py-2 text-xs text-primary">移交需经主管交接审批；通过后该客户负责人与历史报价价格随之转移并锁定。</p>
+        <Field label="接收人" required>
+          <Select value={toUserId} onChange={(e) => setToUserId(e.target.value)}>
+            <option value="">请选择</option>
+            {MOCK_USERS.filter((u) => u.userId !== currentLeaderId).map((u) => (
+              <option key={u.userId} value={u.userId}>{u.name}（{u.depName}）</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="移交原因"><TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="如：区域调整 / 离职交接" /></Field>
+      </div>
+    </Dialog>
   );
 }
 

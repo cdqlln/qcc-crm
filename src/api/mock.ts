@@ -96,6 +96,19 @@ export const customersApi = {
         .filter((t) => t.customerId === customerId)
         .sort((a, b) => b.createDate.localeCompare(a.createDate)),
     ),
+  lastQuotePrices: (customerId: number) => {
+    const qids = new Set(quotations.filter((q) => q.customerId === customerId).map((q) => q.quotationId));
+    const byProduct: Record<number, any> = {};
+    for (const qp of quotationProducts) {
+      if (!qids.has(qp.quotationId)) continue;
+      if (!byProduct[qp.productId]) {
+        const q = quotations.find((x) => x.quotationId === qp.quotationId);
+        byProduct[qp.productId] = { productId: qp.productId, unitPrice: qp.discountPrice, discountRate: qp.discountRate, code: q?.code, quoteDate: q?.quoteDate };
+      }
+    }
+    return delay(Object.values(byProduct));
+  },
+  transfer: (_customerId: number, _toUserId: number, _reason: string) => delay({ status: 2 }),
   create: (input: Partial<Customer>) => {
     const row: Customer = {
       customerId: nextId(customers, 'customerId'),

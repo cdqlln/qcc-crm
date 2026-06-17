@@ -38,27 +38,24 @@ approvalsRouter.get('/approvals/routes', ah(async (req, res) => {
   ok(res, rows.map((r: any) => ({ routeId: r.route_id, businessType: r.business_type, name: r.name, nodes: r.nodes })));
 }));
 
-// 发起审批
-approvalsRouter.post('/approvals/submit', ah(async (req, res) => {
-  const { orgId, userId } = ctx(req);
-  const bt = Number(req.body?.businessType);
-  const bid = Number(req.body?.businessId);
-  const name = String(req.body?.businessName || '');
-  if (!bt || !bid) return fail(res, '缺少 businessType/businessId');
+// 创建审批任务（供报价提交、客户移交等复用）
+export async function createApprovalTask(
+  orgId: number, applicantId: number, bt: number, bid: number, name: string, routeId?: number,
+): Promise<any> {
   const route = await one<any>(
-    req.body?.routeId
+    routeId
       ? `SELECT * FROM work_flow_route WHERE route_id=$1 AND organization_id=$2`
       : `SELECT * FROM work_flow_route WHERE organization_id=$2 AND business_type=$1 AND active=1 ORDER BY route_id LIMIT 1`,
-    req.body?.routeId ? [req.body.routeId, orgId] : [bt, orgId]);
-  if (!route) return fail(res, '未配置该单据的审批流');
+    routeId ? [routeId, orgId] : [bt, orgId]);
+  if (!route) throw new Error('未配置该单据的审批流');
   const nodes: { name: string; approverIds: number[] }[] = route.nodes ?? [];
-  if (nodes.length === 0) return fail(res, '审批流无节点');
+  if (nodes.length === 0) throw new Error('审批流无节点');
 
   const task = await tx(async (c) => {
     const t = (await c.query(
       `INSERT INTO work_flow_task (organization_id, business_type, business_id, business_name, route_id, applicant_id, status, current_node)
        VALUES ($1,$2,$3,$4,$5,$6,2,0) RETURNING *`,
-      [orgId, bt, bid, name, route.route_id, userId])).rows[0];
+      [orgId, bt, bid, name, route.route_id, applicantId])).rows[0];
     for (let i = 0; i < nodes.length; i++) {
       await c.query(
         `INSERT INTO work_flow_task_node (task_id, node_index, name, approver_ids) VALUES ($1,$2,$3,$4)`,
@@ -66,9 +63,24 @@ approvalsRouter.post('/approvals/submit', ah(async (req, res) => {
     }
     return t;
   });
-  await setDocApproval(bt, bid, orgId, 2); // 进行中
+  await setDocApproval(bt, bid, orgId, 2);
   for (const a of nodes[0].approverIds ?? []) await pushMessage(orgId, a, `待审批：${DOC[bt]?.label ?? ''}「${name}」`, bt, bid);
-  ok(res, mapTask(task));
+  return task;
+}
+
+// 发起审批
+approvalsRouter.post('/approvals/submit', ah(async (req, res) => {
+  const { orgId, userId } = ctx(req);
+  const bt = Number(req.body?.businessType);
+  const bid = Number(req.body?.businessId);
+  const name = String(req.body?.businessName || '');
+  if (!bt || !bid) return fail(res, '缺少 businessType/businessId');
+  try {
+    const task = await createApprovalTask(orgId, userId, bt, bid, name, req.body?.routeId);
+    ok(res, mapTask(task));
+  } catch (e) {
+    fail(res, e instanceof Error ? e.message : '提交失败');
+  }
 }));
 
 // 待我审批
@@ -136,6 +148,22 @@ approvalsRouter.get('/approvals/:taskId', ah(async (req, res) => {
   });
 }));
 
+// 审批落地后的业务副作用（目前：客户移交 bt=8）
+async function onApprovalSettled(task: any, orgId: number, approved: boolean) {
+  if (task.business_type !== 8) return;
+  const tr = await one<any>(
+    `SELECT * FROM customer_transfer WHERE customer_id=$1 AND status=2 ORDER BY transfer_id DESC LIMIT 1`,
+    [task.business_id]);
+  if (!tr) return;
+  if (approved) {
+    await one(`UPDATE customer SET pre_leader_id=$1, leader_id=$2 WHERE customer_id=$3`, [tr.from_user_id, tr.to_user_id, tr.customer_id]);
+    await one(`UPDATE customer_transfer SET status=11 WHERE transfer_id=$1`, [tr.transfer_id]);
+    await pushMessage(orgId, tr.to_user_id, `客户已移交给你：${task.business_name}`, 8, tr.customer_id);
+  } else {
+    await one(`UPDATE customer_transfer SET status=3 WHERE transfer_id=$1`, [tr.transfer_id]);
+  }
+}
+
 async function act(taskId: number, orgId: number, userId: number, approve: boolean, comment: string, res: any) {
   const t = await one<any>(`SELECT * FROM work_flow_task WHERE task_id=$1 AND organization_id=$2`, [taskId, orgId]);
   if (!t) return fail(res, '审批任务不存在', 1, 404);
@@ -150,6 +178,7 @@ async function act(taskId: number, orgId: number, userId: number, approve: boole
   if (!approve) {
     await one(`UPDATE work_flow_task SET status=3 WHERE task_id=$1`, [taskId]);
     await setDocApproval(t.business_type, t.business_id, orgId, 3);
+    await onApprovalSettled(t, orgId, false);
     await pushMessage(orgId, t.applicant_id, `你的「${t.business_name}」审批被驳回`, t.business_type, t.business_id);
     return ok(res, { status: 3 });
   }
@@ -157,6 +186,7 @@ async function act(taskId: number, orgId: number, userId: number, approve: boole
   if (isLast) {
     await one(`UPDATE work_flow_task SET status=11 WHERE task_id=$1`, [taskId]);
     await setDocApproval(t.business_type, t.business_id, orgId, 11);
+    await onApprovalSettled(t, orgId, true);
     await pushMessage(orgId, t.applicant_id, `你的「${t.business_name}」审批已通过`, t.business_type, t.business_id);
     return ok(res, { status: 11 });
   }
