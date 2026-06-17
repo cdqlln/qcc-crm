@@ -18,4 +18,8 @@ if [ -f /seed_collab.sql ]; then
   echo "==> 导入 seed_collab.sql（协同模块）"
   psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /seed_collab.sql
 fi
+if [ -f /seed_product.sql ]; then
+  echo "==> 导入 seed_product.sql（产品大类/阶梯价）"
+  psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -f /seed_product.sql
+fi
 echo "==> 数据库初始化完成"

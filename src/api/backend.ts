@@ -121,6 +121,7 @@ export const preCreditsApi = { list: (p: ListParams) => list<PreCredit>('/pre-cr
 export const productsApi = {
   list: (p: ListParams) => list<Product>('/products/list', p),
   all: () => get<Product[]>('/products'),
+  tiers: (id: number) => get<import('@/types').ProductTier[]>(`/products/${id}/tiers`),
 };
 
 export const tasksApi = {
@@ -164,6 +165,7 @@ export const approvalsApi = {
     post<ApprovalTask>('/approvals/submit', input),
   mine: (p: ListParams) => list<ApprovalTask>('/approvals/mine', p),
   initiated: (p: ListParams) => list<ApprovalTask>('/approvals/initiated', p),
+  acted: (p: ListParams) => list<ApprovalTask>('/approvals/acted', p),
   get: (taskId: number) => get<ApprovalTask>(`/approvals/${taskId}`),
   approve: (taskId: number, comment?: string) => post(`/approvals/${taskId}/approve`, { comment }),
   reject: (taskId: number, comment?: string) => post(`/approvals/${taskId}/reject`, { comment }),

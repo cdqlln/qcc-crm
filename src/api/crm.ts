@@ -26,7 +26,7 @@ export const searchApi = USE_API ? backend.searchApi : mock.searchApi;
 // 协同模块
 export const signApi = USE_API ? backend.signApi : mockCollab.signApi;
 export const ticketsApi = USE_API ? backend.ticketsApi : mockCollab.ticketsApi;
-export const approvalsApi = USE_API ? backend.approvalsApi : mockCollab.approvalsApi;
+export const approvalsApi = (USE_API ? backend.approvalsApi : mockCollab.approvalsApi) as typeof backend.approvalsApi;
 export const qywxApi = USE_API ? backend.qywxApi : mockCollab.qywxApi;
 
 // 分析页/弹窗就地聚合使用的内存数据集（始终来自 mock；接入后端后分析页可改为聚合接口）

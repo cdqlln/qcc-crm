@@ -158,6 +158,7 @@ export interface Quotation {
   expiredDate?: string;
   currency: string;
   status: 0 | 1 | 2 | 3; // 0初始 1报价中 2失效 3已生成合同
+  quoteType?: 1 | 2 | 3 | 4; // 1询价 2报价 3标书 4框架协议
   total: string;
   comDiscountRate: string;
   orderDiscountRate: string;
@@ -301,12 +302,22 @@ export interface Product {
   spec?: string;
   unit?: string;
   timeLimits?: number; // 服务周期
+  kind: 1 | 2; // 1数据 2产品
+  deliveryType?: 1 | 2 | 3 | 4; // 1 API 2 离线数据包 3 账号 4 订阅
   active: boolean;
   freePricing: boolean;
   price: string;
   cost: string;
   minDiscount: string;
   maxDiscount: string;
+}
+
+export interface ProductTier {
+  tierId: number;
+  productId: number;
+  minQty: number;
+  maxQty?: number | null;
+  unitPrice: string;
 }
 
 export interface Target {
@@ -395,6 +406,10 @@ export interface ApprovalTask {
   nodeName?: string;
   createDate: string;
   nodes?: ApprovalTaskNode[];
+  /** 「已审」列表：我的处理动作与时间 */
+  myAction?: 0 | 11 | 3;
+  myActedAt?: string;
+  myComment?: string;
 }
 
 export interface ApprovalTaskNode {

@@ -9,6 +9,7 @@ import {
   paymentSheets,
   preCredits,
   products,
+  productTiers,
   quotationProducts,
   quotations,
   targets,
@@ -222,6 +223,7 @@ export const preCreditsApi = {
 export const productsApi = {
   list: (p: ListParams) => paginate(products, p, ['name', 'code']),
   all: () => delay(products),
+  tiers: (id: number) => delay(productTiers[id] ?? []),
 };
 
 // ---------- 待办 §7 ----------

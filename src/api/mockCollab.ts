@@ -98,6 +98,15 @@ export const approvalsApi = {
   mine: (p: ListParams) =>
     paginate(tasks.filter((t) => t.status === 2 && t.nodes?.[t.currentNode]?.approverIds.includes(ME)), p, ['businessName']),
   initiated: (p: ListParams) => paginate(tasks.filter((t) => t.applicantId === ME), p, ['businessName']),
+  acted: (p: ListParams) => {
+    const rows = tasks
+      .map((t) => {
+        const n = t.nodes?.find((x) => x.actedBy === ME && x.action !== 0);
+        return n ? { ...t, myAction: n.action, myActedAt: n.actedAt, myComment: n.comment } : null;
+      })
+      .filter(Boolean) as ApprovalTask[];
+    return paginate(rows, p, ['businessName']);
+  },
   get: (taskId: number) => delay(tasks.find((t) => t.taskId === taskId)),
   approve: (taskId: number, comment?: string) => {
     const t = tasks.find((x) => x.taskId === taskId);

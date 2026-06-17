@@ -25,6 +25,7 @@ const mapTask = (r: any) => ({
   taskId: r.task_id, businessType: r.business_type, businessId: r.business_id, businessName: r.business_name,
   routeId: r.route_id, applicantId: r.applicant_id, applicantName: r.applicant_name,
   status: r.status, currentNode: r.current_node, nodeName: r.node_name, createDate: r.created_at,
+  myAction: r.my_action, myActedAt: r.my_acted_at, myComment: r.my_comment,
 });
 
 // 审批路由模板
@@ -95,6 +96,22 @@ approvalsRouter.post('/approvals/initiated', ah(async (req, res) => {
     select: 't.*, a.name AS applicant_name',
     defaultOrder: 't.created_at DESC',
     baseConds: ['t.organization_id=$1', 't.applicant_id=$2'],
+    baseParams: [orgId, userId], mapRow: mapTask,
+  }, body);
+  ok(res, result);
+}));
+
+// 已审：我审批过的历史记录（含我的处理动作与时间）
+approvalsRouter.post('/approvals/acted', ah(async (req, res) => {
+  const { orgId, userId } = ctx(req);
+  const body = parseList(req);
+  const result = await runList({
+    table: `work_flow_task t
+      JOIN work_flow_task_node n ON n.task_id=t.task_id AND n.acted_by=$2
+      LEFT JOIN app_user a ON a.user_id=t.applicant_id`,
+    select: 't.*, a.name AS applicant_name, n.action AS my_action, n.acted_at AS my_acted_at, n.comment AS my_comment',
+    defaultOrder: 'n.acted_at DESC',
+    baseConds: ['t.organization_id=$1', 'n.acted_by=$2', 'n.action <> 0'],
     baseParams: [orgId, userId], mapRow: mapTask,
   }, body);
   ok(res, result);

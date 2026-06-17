@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/primitives';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { MoneyText } from '@/components/ui/MoneyText';
 import { StatusTag } from '@/components/ui/StatusTag';
+import { QUOTE_TYPE } from '@/lib/enums';
 import { userName } from '@/mock/org';
 import { formatDate } from '@/lib/format';
 import { formatCompact } from '@/lib/money';
@@ -25,9 +26,10 @@ export function QuotationsPage() {
   const totalQuote = q.data.reduce((s, x) => s + Number(x.amount), 0);
 
   const columns: Column<Quotation>[] = [
-    { key: 'name', header: '报价单名称', render: (r) => <span className="font-medium text-primary">{r.name}</span> },
-    { key: 'code', header: '编号', render: (r) => <span className="text-text-faint">{r.code} v{r.version}</span> },
-    { key: 'customerName', header: '客户' },
+    { key: 'name', header: '报价单名称', minWidth: 160, truncate: 220, render: (r) => <span className="font-medium text-primary">{r.name}</span> },
+    { key: 'code', header: '编号', minWidth: 120, render: (r) => <span className="text-text-faint">{r.code} v{r.version}</span> },
+    { key: 'quoteType', header: '类型', minWidth: 80, render: (r) => <StatusTag {...(QUOTE_TYPE[r.quoteType ?? 2])} dot={false} /> },
+    { key: 'customerName', header: '客户', minWidth: 140, truncate: 180 },
     { key: 'currency', header: '币种', render: (r) => currencySymbol(r.currency) },
     { key: 'amount', header: '报价金额', numeric: true, sortable: true, render: (r) => <MoneyText value={r.amount} currency={r.currency} strong /> },
     { key: 'comDiscountRate', header: '综合折扣率', numeric: true, render: (r) => `${r.comDiscountRate}%` },

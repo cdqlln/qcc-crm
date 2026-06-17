@@ -29,7 +29,7 @@ export function ApprovalsPage() {
   const [tab, setTab] = useState('mine');
   const q = useListQuery<ApprovalTask>(
     'approvals',
-    (p) => (tab === 'mine' ? approvalsApi.mine(p) : approvalsApi.initiated(p)),
+    (p) => (tab === 'mine' ? approvalsApi.mine(p) : tab === 'acted' ? approvalsApi.acted(p) : approvalsApi.initiated(p)),
     { defaultTab: tab },
   );
   const [openId, setOpenId] = useState<number | null>(null);
@@ -40,20 +40,25 @@ export function ApprovalsPage() {
     q.setTab(t);
   };
 
-  const columns: Column<ApprovalTask>[] = [
-    { key: 'businessType', header: '类型', render: (r) => <StatusTag kind="info" label={BIZ[r.businessType] ?? '单据'} dot={false} /> },
-    { key: 'businessName', header: '单据', render: (r) => <span className="font-medium text-text">{r.businessName}</span> },
-    { key: 'applicantName', header: '发起人', render: (r) => <UserCell name={r.applicantName ?? userName(r.applicantId)} /> },
-    { key: 'nodeName', header: '当前节点', render: (r) => r.status === 2 ? r.nodeName : '—' },
-    { key: 'status', header: '状态', render: (r) => <StatusTag {...STATUS[r.status]} /> },
-    { key: 'createDate', header: '发起时间', numeric: true, render: (r) => formatDateTime(r.createDate) },
+    const columns: Column<ApprovalTask>[] = [
+    { key: 'businessType', header: '类型', minWidth: 80, render: (r) => <StatusTag kind="info" label={BIZ[r.businessType] ?? '单据'} dot={false} /> },
+    { key: 'businessName', header: '单据', minWidth: 160, truncate: 220, render: (r) => <span className="font-medium text-text">{r.businessName}</span> },
+    { key: 'applicantName', header: '发起人', minWidth: 100, render: (r) => <UserCell name={r.applicantName ?? userName(r.applicantId)} /> },
+    ...(tab === 'acted'
+      ? [
+          { key: 'myAction', header: '我的处理', minWidth: 90, render: (r: ApprovalTask) => <StatusTag kind={r.myAction === 11 ? 'success' : 'danger'} label={r.myAction === 11 ? '已通过' : '已驳回'} /> },
+          { key: 'myActedAt', header: '处理时间', minWidth: 140, numeric: true, render: (r: ApprovalTask) => formatDateTime(r.myActedAt) },
+        ]
+      : [{ key: 'nodeName', header: '当前节点', minWidth: 110, render: (r: ApprovalTask) => (r.status === 2 ? r.nodeName : '—') }]),
+    { key: 'status', header: '单据状态', minWidth: 90, render: (r) => <StatusTag {...STATUS[r.status]} /> },
+    { key: 'createDate', header: '发起时间', numeric: true, minWidth: 140, render: (r) => formatDateTime(r.createDate) },
   ];
 
   return (
     <div>
       <PageHeader title="审批" description="报价/合同/发票等单据审批流转" />
       <div className="mb-3">
-        <Tabs items={[{ key: 'mine', label: '待我审批' }, { key: 'initiated', label: '我发起的' }]} value={tab} onChange={switchTab} className="border-0" />
+        <Tabs items={[{ key: 'mine', label: '待我审批' }, { key: 'acted', label: '已审' }, { key: 'initiated', label: '我发起的' }]} value={tab} onChange={switchTab} className="border-0" />
       </div>
       <DataTable
         columns={columns}

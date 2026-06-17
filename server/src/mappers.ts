@@ -98,6 +98,7 @@ export const mapQuotation = (r: any) => ({
   expiredDate: r.expired_date,
   currency: r.currency,
   status: r.status,
+  quoteType: r.quote_type,
   total: r.total,
   comDiscountRate: r.com_discount_rate,
   orderDiscountRate: r.order_discount_rate,
@@ -214,12 +215,22 @@ export const mapProduct = (r: any) => ({
   spec: r.spec,
   unit: r.unit,
   timeLimits: r.time_limits,
+  kind: r.kind,
+  deliveryType: r.delivery_type,
   active: r.active,
   freePricing: r.free_pricing,
   price: r.price,
   cost: r.cost,
   minDiscount: r.min_discount,
   maxDiscount: r.max_discount,
+});
+
+export const mapProductTier = (r: any) => ({
+  tierId: r.tier_id,
+  productId: r.product_id,
+  minQty: r.min_qty,
+  maxQty: r.max_qty,
+  unitPrice: r.unit_price,
 });
 
 export const mapBackLog = (r: any) => ({

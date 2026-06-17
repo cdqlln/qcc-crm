@@ -6,10 +6,13 @@ import { approvalsApi, productsApi, quotationsApi } from '@/api/crm';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { MoneyText } from '@/components/ui/MoneyText';
+import { StatusTag } from '@/components/ui/StatusTag';
+import { Select } from '@/components/ui/form';
 import { useUI } from '@/store/ui';
 import { add, mul, rate, sub, d } from '@/lib/money';
 import { cn } from '@/lib/cn';
-import type { Product } from '@/types';
+import { DELIVERY_TYPE, PRODUCT_KIND, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
+import type { Product, ProductTier } from '@/types';
 
 interface Line {
   id: number;
@@ -21,6 +24,8 @@ interface Line {
   discountRate: string;
   cost: string;
   minDiscount: string;
+  kind?: 1 | 2;
+  tiers?: ProductTier[]; // 数据类阶梯价
 }
 
 const GROSS_WARN = 30; // 毛利率低于此值高亮
@@ -49,6 +54,7 @@ export function QuotationEditorPage() {
   const [orderDiscount, setOrderDiscount] = useState('1.00');
   const [otherCharges, setOtherCharges] = useState('0');
   const [discount, setDiscount] = useState('0');
+  const [quoteType, setQuoteType] = useState('2');
   const [seeded, setSeeded] = useState(false);
 
   // 用既有数据初始化（一次）
@@ -70,17 +76,35 @@ export function QuotationEditorPage() {
       setOrderDiscount(existing.orderDiscountRate);
       setOtherCharges(existing.otherCharges);
       setDiscount(existing.discount);
+      setQuoteType(String(existing.quoteType ?? 2));
     }
     setSeeded(true);
   }
 
-  const addLine = (p: Product) => {
+  const addLine = async (p: Product) => {
+    const newId = lid++;
     setLines((ls) => [
       ...ls,
-      { id: lid++, productId: p.productId, productName: p.name, spec: p.spec, quantity: 1, price: p.price, discountRate: '1.00', cost: p.cost, minDiscount: p.minDiscount },
+      { id: newId, productId: p.productId, productName: p.name, spec: p.spec, quantity: 1, price: p.price, discountRate: '1.00', cost: p.cost, minDiscount: p.minDiscount, kind: p.kind },
     ]);
+    // 数据类：拉取阶梯价，按数量自动取单价
+    if (p.kind === 1) {
+      const tiers = await productsApi.tiers(p.productId);
+      const unit = resolveTierPrice(tiers, 1) ?? p.price;
+      setLines((ls) => ls.map((l) => (l.id === newId ? { ...l, tiers, price: unit } : l)));
+    }
   };
   const update = (id: number, patch: Partial<Line>) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  // 数量变化：数据类按阶梯重算单价
+  const setQty = (id: number, qty: number) =>
+    setLines((ls) =>
+      ls.map((l) => {
+        if (l.id !== id) return l;
+        const quantity = Math.max(1, qty || 1);
+        const price = l.tiers && l.tiers.length ? resolveTierPrice(l.tiers, quantity) ?? l.price : l.price;
+        return { ...l, quantity, price };
+      }),
+    );
   const remove = (id: number) => setLines((ls) => ls.filter((l) => l.id !== id));
 
   // 实时计算
@@ -135,6 +159,27 @@ export function QuotationEditorPage() {
 
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 space-y-4">
+          {/* 基本信息 */}
+          <Card>
+            <CardHeader title="基本信息" />
+            <div className="flex flex-wrap items-end gap-6 p-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-text">报价类型</label>
+                <Select value={quoteType} onChange={(e) => setQuoteType(e.target.value)} className="w-40">
+                  {QUOTE_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </Select>
+                {(quoteType === '3' || quoteType === '4') && (
+                  <span className="text-xs text-text-faint">
+                    {quoteType === '3' ? '招投标标书：建议附技术/商务分册' : '框架协议：约定阶梯单价与采购总量'}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm text-text-weak">
+                客户：{existing?.customerName ?? '—'}
+              </div>
+            </div>
+          </Card>
+
           {/* 行项目编辑 */}
           <Card>
             <CardHeader
@@ -142,11 +187,16 @@ export function QuotationEditorPage() {
               extra={
                 <div className="group relative">
                   <Button size="sm"><Plus size={13} />添加产品</Button>
-                  <div className="absolute right-0 top-8 z-20 hidden w-56 rounded-lg border border-border bg-surface py-1 shadow-card group-hover:block">
+                  <div className="absolute right-0 top-8 z-20 hidden max-h-80 w-72 overflow-auto rounded-lg border border-border bg-surface py-1 shadow-card group-hover:block">
                     {products.map((p) => (
-                      <button key={p.productId} onClick={() => addLine(p)} className="flex w-full items-center justify-between px-3 py-1.5 text-sm hover:bg-bg">
-                        <span>{p.name}</span>
-                        <MoneyText value={p.price} className="text-xs text-text-faint" />
+                      <button key={p.productId} onClick={() => addLine(p)} className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-sm hover:bg-bg">
+                        <span className="flex items-center gap-1.5">
+                          <StatusTag kind={PRODUCT_KIND[p.kind].kind} label={PRODUCT_KIND[p.kind].label} dot={false} />
+                          <span className="truncate">{p.name}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-text-faint">
+                          {p.kind === 1 ? '阶梯价' : <MoneyText value={p.price} />}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -171,11 +221,17 @@ export function QuotationEditorPage() {
                   {calc.rows.map((r) => (
                     <tr key={r.id} className="border-b border-border last:border-0">
                       <td className="px-3 py-2">
-                        <div className="font-medium text-text">{r.productName}</div>
-                        <div className="text-xs text-text-faint">{r.spec}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-medium text-text">{r.productName}</span>
+                          {r.kind && <StatusTag kind={PRODUCT_KIND[r.kind].kind} label={PRODUCT_KIND[r.kind].label} dot={false} />}
+                        </div>
+                        <div className="text-xs text-text-faint">
+                          {r.spec}
+                          {r.tiers && r.tiers.length > 0 && <span className="ml-1 text-primary">· 阶梯价</span>}
+                        </div>
                       </td>
                       <td className="px-2 py-2 text-right">
-                        <NumInput value={String(r.quantity)} onChange={(v) => update(r.id, { quantity: Math.max(1, Number(v) || 1) })} width="w-14" />
+                        <NumInput value={String(r.quantity)} onChange={(v) => setQty(r.id, Number(v))} width="w-14" />
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums">{r.price}</td>
                       <td className="px-2 py-2 text-right">

@@ -9,6 +9,7 @@ import type {
   PaymentSheet,
   PreCredit,
   Product,
+  ProductTier,
   Quotation,
   QuotationProduct,
   Target,
@@ -54,22 +55,43 @@ function companyName(): string {
 }
 
 // ---------- 产品 §6.8 ----------
-export const products: Product[] = PRODUCT_NAMES.map((name, i) => ({
-  productId: i + 1,
-  code: `P${String(i + 1).padStart(4, '0')}`,
-  name,
-  categoryId: (i % 3) + 1,
-  categoryName: ['基础服务', '数据服务', '增值服务'][i % 3],
-  spec: pick(['标准版', '专业版', '旗舰版', '企业版']),
-  unit: pick(['套', '年', '次', '个']),
-  timeLimits: pick([0, 12, 24, 36]),
-  active: true,
-  freePricing: i % 5 === 0,
-  price: String(int(2, 60) * 1000),
-  cost: String(int(1, 20) * 1000),
-  minDiscount: '0.70',
-  maxDiscount: '1.00',
-}));
+// 大类/交付：1数据 2产品；交付 1API 2离线数据包 3账号 4订阅（与 DB seed 对齐）
+const PRODUCT_META: [1 | 2, 1 | 2 | 3 | 4][] = [
+  [2, 3], [2, 4], [1, 2], [1, 1], [1, 1], [2, 4], [2, 4], [1, 1],
+];
+export const products: Product[] = PRODUCT_NAMES.map((name, i) => {
+  const [kind, deliveryType] = PRODUCT_META[i] ?? [2, 3];
+  return {
+    productId: i + 1,
+    code: `P${String(i + 1).padStart(4, '0')}`,
+    name,
+    categoryId: (i % 3) + 1,
+    categoryName: ['基础服务', '数据服务', '增值服务'][i % 3],
+    spec: pick(['标准版', '专业版', '旗舰版', '企业版']),
+    unit: kind === 1 ? pick(['次', '万次', '套']) : pick(['账号', '年', '套']),
+    timeLimits: pick([0, 12, 24, 36]),
+    kind,
+    deliveryType,
+    active: true,
+    freePricing: false,
+    price: String(int(2, 60) * 1000),
+    cost: String(int(1, 20) * 1000),
+    minDiscount: '0.70',
+    maxDiscount: '1.00',
+  };
+});
+
+// 数据类产品的采购量阶梯价（量大单价递减）
+export const productTiers: Record<number, ProductTier[]> = {};
+for (const p of products) {
+  if (p.kind !== 1) continue;
+  const base = Number(p.price);
+  productTiers[p.productId] = [
+    { tierId: p.productId * 10 + 1, productId: p.productId, minQty: 1, maxQty: 9, unitPrice: String(base) },
+    { tierId: p.productId * 10 + 2, productId: p.productId, minQty: 10, maxQty: 49, unitPrice: String(Math.round(base * 0.9)) },
+    { tierId: p.productId * 10 + 3, productId: p.productId, minQty: 50, maxQty: null, unitPrice: String(Math.round(base * 0.8)) },
+  ];
+}
 
 // ---------- 客户/线索 §6.2 6.3 ----------
 export const customers: Customer[] = [];
@@ -239,6 +261,7 @@ for (let i = 1; i <= 40; i++) {
     expiredDate: daysAhead(int(5, 30)),
     currency: 'CNY',
     status: pick([0, 1, 2, 3] as const),
+    quoteType: pick([1, 2, 3, 4] as const),
     total,
     comDiscountRate: rate(amount, total),
     orderDiscountRate,

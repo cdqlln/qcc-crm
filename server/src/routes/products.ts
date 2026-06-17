@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { ah, ctx, ok, parseList } from '../http.js';
 import { runList } from '../list.js';
-import { mapProduct } from '../mappers.js';
+import { mapProduct, mapProductTier } from '../mappers.js';
 
 export const productsRouter = Router();
 
@@ -37,5 +37,14 @@ productsRouter.get(
     const { orgId } = ctx(req);
     const rows = await query(`${'SELECT ' + SELECT + ' FROM ' + TABLE} WHERE p.organization_id=$1 AND p.active=true ORDER BY p.product_id`, [orgId]);
     ok(res, rows.map(mapProduct));
+  }),
+);
+
+// 阶梯报价（数据类产品按采购量取单价）
+productsRouter.get(
+  '/products/:id/tiers',
+  ah(async (req, res) => {
+    const rows = await query(`SELECT * FROM product_tier WHERE product_id=$1 ORDER BY sort_order`, [req.params.id]);
+    ok(res, rows.map(mapProductTier));
   }),
 );
