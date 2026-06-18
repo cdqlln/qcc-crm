@@ -242,8 +242,8 @@ export const quotationsApi = {
   create: (input: any) => {
     const id = quotations.reduce((m, q) => Math.max(m, q.quotationId), 0) + 1;
     const cust = customers.find((c) => c.customerId === input.customerId);
-    const total = (input.lines ?? []).reduce((s: number, l: any) => s + Number(l.price) * Number(l.discountRate) * l.quantity, 0);
-    const cost = (input.lines ?? []).reduce((s: number, l: any) => s + Number(l.cost) * l.quantity, 0);
+    const total = (input.lines ?? []).reduce((s: number, l: any) => s + (l.pricingMode === 'usage' ? 0 : Number(l.price) * Number(l.discountRate) * l.quantity), 0);
+    const cost = (input.lines ?? []).reduce((s: number, l: any) => s + (l.pricingMode === 'usage' ? 0 : Number(l.cost) * l.quantity), 0);
     const amount = total * Number(input.orderDiscountRate ?? 1) + Number(input.otherCharges ?? 0) - Number(input.discount ?? 0);
     const row: any = {
       quotationId: id, code: `QT${new Date().getFullYear()}${String(id).padStart(4, '0')}`, version: 1,

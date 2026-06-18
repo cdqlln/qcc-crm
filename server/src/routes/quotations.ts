@@ -42,6 +42,7 @@ const lineSchema = z.object({
   price: z.string(),
   discountRate: z.string(),
   cost: z.string(),
+  pricingMode: z.enum(['qty', 'usage']).default('qty'),
 });
 const saveSchema = z.object({
   name: z.string().min(1),
@@ -60,9 +61,9 @@ async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
   for (const l of lines) {
     await client.query(
-      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.discountRate, l.cost],
+      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.discountRate, l.cost, l.pricingMode ?? 'qty'],
     );
   }
   // 行项目维护 total / cost（amount 等为生成列自动派生）

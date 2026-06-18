@@ -28,6 +28,7 @@ interface Line {
   salesDiscount: string; // 销售自主下限
   kind?: 1 | 2;
   tiers?: ProductTier[];
+  pricingMode: 'qty' | 'usage'; // 按数量 / 按用量(API接口单价，框架)
 }
 
 const GROSS_WARN = 30;
@@ -82,6 +83,7 @@ export function QuotationEditorPage() {
           id: lid++, productId: l.productId, productName: l.productName, spec: l.spec, quantity: l.quantity,
           price: l.price, discountRate: l.discountRate, cost: d(l.cost).div(l.quantity || 1).toFixed(2),
           minDiscount: p?.minDiscount ?? '0.70', salesDiscount: p?.salesDiscount ?? '0.95', kind: p?.kind,
+          pricingMode: (l.pricingMode ?? 'qty') as 'qty' | 'usage',
         };
       }),
     );
@@ -98,6 +100,7 @@ export function QuotationEditorPage() {
     setLines((ls) => [...ls, {
       id: newId, productId: p.productId, productName: p.name, spec: p.spec, quantity: 1, price: p.price,
       discountRate: '1.00', cost: p.cost, minDiscount: p.minDiscount, salesDiscount: p.salesDiscount ?? '0.95', kind: p.kind,
+      pricingMode: 'qty',
     }]);
     if (p.kind === 1) {
       const tiers = await productsApi.tiers(p.productId);
@@ -113,26 +116,37 @@ export function QuotationEditorPage() {
       return { ...l, quantity, price };
     }));
   const remove = (lineId: number) => setLines((ls) => ls.filter((l) => l.id !== lineId));
+  const setMode = (lineId: number, mode: 'qty' | 'usage') => {
+    setLines((ls) => ls.map((l) => (l.id === lineId ? { ...l, pricingMode: mode } : l)));
+    if (mode === 'usage' && quoteType !== '4') {
+      setQuoteType('4'); // 按用量/接口报价 → 框架协议
+      toast('已切换为框架协议（按用量/接口单价，调用量未知）', 'info');
+    }
+  };
 
   const calc = useMemo(() => {
     let total = '0', cost = '0';
     const rows = lines.map((l) => {
-      const salePrice = mul(l.price, l.discountRate);
-      const subtotal = mul(salePrice, l.quantity);
-      const lineCost = mul(l.cost, l.quantity);
+      const usage = l.pricingMode === 'usage';
+      const salePrice = mul(l.price, l.discountRate); // 单价/接口单价（折后）
+      const subtotal = usage ? '0.00' : mul(salePrice, l.quantity);
+      const lineCost = usage ? '0.00' : mul(l.cost, l.quantity);
       total = add(total, subtotal); cost = add(cost, lineCost);
       // 销售自主下限 = max(客户分级上限, 产品自主下限)
       const floor = Math.max(Number(levelCap), Number(l.salesDiscount));
-      const belowAuthority = d(l.discountRate).lt(floor.toString());
-      const belowHard = d(l.discountRate).lt(l.minDiscount);
-      return { ...l, salePrice, subtotal, lineCost, floor, belowAuthority, belowHard };
+      // 有效折扣 = 行折扣 × 整单折扣（整单折扣也纳入权限判定）
+      const effRate = mul(l.discountRate, orderDiscount);
+      const belowAuthority = d(effRate).lt(floor.toString());
+      const belowHard = d(effRate).lt(l.minDiscount);
+      return { ...l, usage, salePrice, subtotal, lineCost, floor, effRate, belowAuthority, belowHard };
     });
     const amount = sub(add(mul(total, orderDiscount), otherCharges), discount);
     const grossProfit = sub(amount, cost);
     const grossRate = rate(grossProfit, amount);
     const needApproval = rows.some((r) => r.belowAuthority);
     const hasHard = rows.some((r) => r.belowHard);
-    return { rows, total, cost, amount, grossProfit, grossRate, needApproval, hasHard };
+    const hasUsage = rows.some((r) => r.usage);
+    return { rows, total, cost, amount, grossProfit, grossRate, needApproval, hasHard, hasUsage };
   }, [lines, orderDiscount, otherCharges, discount, levelCap]);
 
   const lowMargin = Number(calc.grossRate) < GROSS_WARN && lines.length > 0;
@@ -144,7 +158,12 @@ export function QuotationEditorPage() {
     name: name || `${customer?.name ?? ''} ${QUOTE_TYPE[Number(quoteType)].label}单`,
     customerId: effCustomerId, quoteType: Number(quoteType), currency: 'CNY',
     orderDiscountRate: orderDiscount, otherCharges, discount,
-    lines: lines.map((l) => ({ productId: l.productId, spec: l.spec, quantity: l.quantity, price: l.price, discountRate: l.discountRate, cost: mul(l.cost, l.quantity) })),
+    lines: lines.map((l) => ({
+      productId: l.productId, spec: l.spec, quantity: l.pricingMode === 'usage' ? 1 : l.quantity,
+      price: l.price, discountRate: l.discountRate,
+      cost: l.pricingMode === 'usage' ? '0' : mul(l.cost, l.quantity),
+      pricingMode: l.pricingMode,
+    })),
   });
 
   const ensureSaved = async (): Promise<number | null> => {
@@ -193,7 +212,7 @@ export function QuotationEditorPage() {
                   customerName: customer?.name ?? existing?.customerName,
                   date: existing?.quoteDate,
                   currency: 'CNY',
-                  lines: calc.rows.map((r) => ({ productName: r.productName, spec: r.spec, quantity: r.quantity, price: r.price, discountRate: r.discountRate, salePrice: r.salePrice, subtotal: r.subtotal })),
+                  lines: calc.rows.map((r) => ({ productName: r.productName, spec: r.spec, quantity: r.quantity, price: r.price, discountRate: r.discountRate, salePrice: r.salePrice, subtotal: r.subtotal, usage: r.usage })),
                   total: calc.total, orderDiscount, otherCharges, discount, amount: calc.amount,
                 });
                 if (!okPrint) toast('请允许弹出窗口以导出 PDF', 'error');
@@ -292,9 +311,24 @@ export function QuotationEditorPage() {
                           <span className="font-medium text-text">{r.productName}</span>
                           {r.kind && <StatusTag kind={PRODUCT_KIND[r.kind].kind} label={PRODUCT_KIND[r.kind].label} dot={false} />}
                         </div>
-                        <div className="text-xs text-text-faint">{r.spec}{r.tiers?.length ? <span className="ml-1 text-primary">· 阶梯价</span> : null}</div>
+                        <div className="mt-0.5 flex items-center gap-2 text-xs text-text-faint">
+                          <span>{r.spec}{r.tiers?.length ? <span className="ml-1 text-primary">· 阶梯价</span> : null}</span>
+                          {r.kind === 1 && (
+                            <span className="inline-flex overflow-hidden rounded border border-border">
+                              {(['qty', 'usage'] as const).map((m) => (
+                                <button key={m} onClick={() => setMode(r.id, m)}
+                                  className={cn('px-1.5 py-0.5 text-[10px]', r.pricingMode === m ? 'bg-primary text-white' : 'text-text-weak')}>
+                                  {m === 'qty' ? '按数量' : '按用量'}
+                                </button>
+                              ))}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-2 py-2 text-right"><NumInput value={String(r.quantity)} onChange={(v) => setQty(r.id, Number(v))} width="w-14" /></td>
+                      <td className="px-2 py-2 text-right">
+                        {r.usage ? <span className="text-xs text-text-faint">按量</span>
+                          : <NumInput value={String(r.quantity)} onChange={(v) => setQty(r.id, Number(v))} width="w-14" />}
+                      </td>
                       <td className="px-2 py-2 text-right tabular-nums">{r.price}</td>
                       <td className="px-2 py-2 text-right">
                         <div className="flex flex-col items-end">
@@ -303,12 +337,12 @@ export function QuotationEditorPage() {
                           {r.belowHard ? (
                             <span className="text-[10px] text-danger">超绝对下限 {r.minDiscount}</span>
                           ) : r.belowAuthority ? (
-                            <span className="text-[10px] text-warning">超销售权限({r.floor.toFixed(2)})·需审批</span>
+                            <span className="text-[10px] text-warning">超权限({r.floor.toFixed(2)})·需审批</span>
                           ) : null}
                         </div>
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums">
-                        <div>{r.salePrice}</div>
+                        <div>{r.salePrice}{r.usage && <span className="ml-1 text-[10px] text-text-faint">/接口</span>}</div>
                         {lastPriceMap.has(r.productId) && (
                           <div className={cn('text-[10px]', d(r.salePrice).lt(lastPriceMap.get(r.productId)!) ? 'text-danger' : 'text-text-faint')}>
                             上次 {lastPriceMap.get(r.productId)}
@@ -316,8 +350,8 @@ export function QuotationEditorPage() {
                           </div>
                         )}
                       </td>
-                      <td className="px-2 py-2 text-right font-medium tabular-nums">{r.subtotal}</td>
-                      <td className="px-2 py-2 text-right tabular-nums text-text-weak">{sub(r.subtotal, r.lineCost)}</td>
+                      <td className="px-2 py-2 text-right font-medium tabular-nums">{r.usage ? <span className="text-xs text-text-faint">按量结算</span> : r.subtotal}</td>
+                      <td className="px-2 py-2 text-right tabular-nums text-text-weak">{r.usage ? '—' : sub(r.subtotal, r.lineCost)}</td>
                       <td className="px-2 py-2 text-right"><button onClick={() => remove(r.id)} className="text-text-faint hover:text-danger"><Trash2 size={14} /></button></td>
                     </tr>
                   ))}
@@ -347,6 +381,11 @@ export function QuotationEditorPage() {
             {canSelfIssue && (
               <div className="flex items-center gap-1.5 rounded-md bg-[#E7F7F0] px-3 py-2 text-xs text-success">
                 <CheckCircle2 size={13} />折扣在销售权限内，可直接「确认出单」无需审批
+              </div>
+            )}
+            {calc.hasUsage && (
+              <div className="rounded-md bg-[#FEF3E0] px-3 py-2 text-xs text-warning">
+                含「按用量/接口单价」行：调用量未知，不计入固定总价，按框架协议约定单价后按实际用量结算。
               </div>
             )}
             {!isInquiry && (

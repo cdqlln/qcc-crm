@@ -192,9 +192,10 @@ export interface QuotationProduct {
   quantity: number;
   price: string; // 原价
   discountRate: string;
-  discountPrice: string; // 售价
-  totalPrice: string; // 小计
+  discountPrice: string; // 售价/接口单价
+  totalPrice: string; // 小计（按用量行为 0）
   cost: string;
+  pricingMode?: 'qty' | 'usage'; // qty按数量 usage按用量(API接口单价,框架)
 }
 
 export interface Contract {

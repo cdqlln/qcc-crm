@@ -10,6 +10,7 @@ interface PrintLine {
   discountRate: string;
   salePrice: string;
   subtotal: string;
+  usage?: boolean;
 }
 interface PrintData {
   quoteType: number;
@@ -33,12 +34,12 @@ export function printQuotation(d: PrintData) {
     .map(
       (l, i) => `<tr>
         <td>${i + 1}</td>
-        <td>${esc(l.productName)}<div class="spec">${esc(l.spec ?? '')}</div></td>
-        <td class="r">${l.quantity}</td>
+        <td>${esc(l.productName)}<div class="spec">${esc(l.spec ?? '')}${l.usage ? ' · 按用量/接口单价(框架)' : ''}</div></td>
+        <td class="r">${l.usage ? '按量' : l.quantity}</td>
         <td class="r">${formatMoney(l.price, cur)}</td>
         <td class="r">${(Number(l.discountRate) * 100).toFixed(0)}%</td>
-        <td class="r">${formatMoney(l.salePrice, cur)}</td>
-        <td class="r">${formatMoney(l.subtotal, cur)}</td>
+        <td class="r">${formatMoney(l.salePrice, cur)}${l.usage ? '/接口' : ''}</td>
+        <td class="r">${l.usage ? '按量结算' : formatMoney(l.subtotal, cur)}</td>
       </tr>`,
     )
     .join('');

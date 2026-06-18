@@ -130,6 +130,7 @@ export const mapQuotationProduct = (r: any) => ({
   discountPrice: r.discount_price,
   totalPrice: r.total_price,
   cost: r.cost,
+  pricingMode: r.pricing_mode,
 });
 
 export const mapContract = (r: any) => ({
