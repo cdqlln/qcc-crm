@@ -226,6 +226,9 @@ function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="邮箱" error={errors.email?.message}>
           <TextInput {...register('email')} />
         </Field>
+        <Field label="企查查ID" hint="填写后按工商关系自动归集集团">
+          <TextInput placeholder="如 QCCDEMO_A1" {...register('refCompanyId')} />
+        </Field>
         <UserSelect register={register} name="leaderId" errors={errors} />
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />

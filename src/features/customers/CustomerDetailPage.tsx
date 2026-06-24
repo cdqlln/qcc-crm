@@ -286,7 +286,10 @@ function GroupSection({ cust }: { cust: Customer }) {
               <span className="text-text-faint">未归属集团</span>
             )}
           </div>
-          <Button size="sm" onClick={() => setOpen(true)}><Network size={13} />调整集团</Button>
+          <div className="flex gap-2">
+            <RegroupButton />
+            <Button size="sm" onClick={() => setOpen(true)}><Network size={13} />调整集团</Button>
+          </div>
         </div>
         {cust.groupId && (
           <div className="mt-2 text-sm text-text-weak">
@@ -300,6 +303,26 @@ function GroupSection({ cust }: { cust: Customer }) {
       {open && <GroupDialog cust={cust} onClose={() => setOpen(false)} />}
     </Section>
   );
+}
+
+// 按工商关系(企查查集团/实控人)全量自动归集
+function RegroupButton() {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await groupsApi.autoRegroup();
+      toast(`工商关系归集完成：扫描 ${r.scanned}，归集 ${r.grouped}`, 'success');
+      qc.invalidateQueries();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '归集失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Button size="sm" onClick={run} disabled={busy}><Network size={13} />{busy ? '归集中…' : '工商关系归集'}</Button>;
 }
 
 function GroupDialog({ cust, onClose }: { cust: Customer; onClose: () => void }) {

@@ -5,6 +5,7 @@ import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapContact, mapCustomer, mapTracking } from '../mappers.js';
 import { createApprovalTask } from './approvals.js';
+import { autoAttachGroup } from './groups.js';
 import { dataScopeCond } from '../auth.js';
 
 export const customersRouter = Router();
@@ -193,6 +194,7 @@ const createSchema = z.object({
   phoneName: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().optional(),
+  refCompanyId: z.string().optional(),
   leaderId: z.coerce.number().int().positive(),
 });
 
@@ -203,18 +205,14 @@ customersRouter.post(
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
-    const row = await one(
-      `INSERT INTO customer (organization_id, name, category, status_term_id, level_term_id, source_term_id,
+    const row = await one<any>(
+      `INSERT INTO customer (organization_id, name, ref_company_id, category, status_term_id, level_term_id, source_term_id,
          industry, phone_name, phone, email, leader_id, created_by, tracking_update_at)
-       VALUES ($1,$2,3,8,$3,$4,$5,$6,$7,$8,$9,$10, now()) RETURNING *`,
-      [orgId, d.name, d.level, d.source, d.industry ?? null, d.phoneName ?? null, d.phone ?? null, d.email ?? null, d.leaderId, userId],
+       VALUES ($1,$2,$3,3,8,$4,$5,$6,$7,$8,$9,$10,$11, now()) RETURNING *`,
+      [orgId, d.name, d.refCompanyId ?? null, d.level, d.source, d.industry ?? null, d.phoneName ?? null, d.phone ?? null, d.email ?? null, d.leaderId, userId],
     );
-    // 按字号自动归属集团
-    const g = await one<any>(
-      `SELECT group_id FROM customer_group WHERE organization_id=$1 AND match_key IS NOT NULL AND $2 ILIKE '%'||match_key||'%' LIMIT 1`,
-      [orgId, d.name],
-    );
-    if (g) await one(`UPDATE customer SET group_id=$1 WHERE customer_id=$2`, [g.group_id, (row as any).customer_id]);
-    ok(res, mapCustomer({ ...row, group_id: g?.group_id }));
+    // 按工商关系(企查查集团/实控人)自动归集；多公司同集团时自动归到一起
+    const groupId = await autoAttachGroup(orgId, row.customer_id, d.name, d.refCompanyId);
+    ok(res, mapCustomer({ ...row, group_id: groupId }));
   }),
 );

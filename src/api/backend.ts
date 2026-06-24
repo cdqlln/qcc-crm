@@ -247,6 +247,7 @@ export const groupsApi = {
   remove: (id: number) => req(`/customer-groups/${id}`, { method: 'DELETE' }),
   members: (id: number) => get<Customer[]>(`/customer-groups/${id}/members`),
   setCustomerGroup: (customerId: number, groupId: number | null) => put(`/customers/${customerId}/group`, { groupId }),
+  autoRegroup: () => post<{ scanned: number; grouped: number }>('/customer-groups/auto-regroup'),
 };
 
 export const rolesApi = {
