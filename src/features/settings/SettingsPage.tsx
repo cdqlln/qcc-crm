@@ -11,7 +11,7 @@ import { usePerm } from '@/store/auth';
 import type { DiscountPolicy } from '@/types';
 
 const ITEMS = [
-  { icon: Building2, title: '组织 / 部门', desc: 'organization · department 部门树', path: '/settings', perm: 'system.org' },
+  { icon: Building2, title: '组织 / 部门', desc: '组织信息 + 部门树 + 成员归属', path: '/settings/org', perm: 'system.org' },
   { icon: Shield, title: '角色 / 权限', desc: 'RBAC 权限点 + 数据范围 + 成员分配', path: '/settings/roles', perm: 'system.role' },
   { icon: SlidersHorizontal, title: '字段配置', desc: '列表列显隐 / 自定义字段', path: '/settings', perm: 'system.dict' },
   { icon: Workflow, title: '审批流', desc: 'work_flow_route / task / form', path: '/settings', perm: 'system.role' },

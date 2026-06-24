@@ -449,6 +449,29 @@ export interface QywxMessage {
   createDate: string;
 }
 
+// ---- 组织/部门 ----
+export interface OrgInfo {
+  organizationId: number;
+  name: string;
+  refCompanyId?: string;
+}
+export interface DeptNode {
+  depId: number;
+  parentId: number | null;
+  name: string;
+  path: string;
+  depth: number;
+  memberCount: number;
+  children?: DeptNode[];
+}
+export interface DeptMember {
+  userId: number;
+  name: string;
+  position: number;
+  status: number;
+  username?: string;
+}
+
 // ---- RBAC ----
 export interface PermissionItem {
   permissionId: number;

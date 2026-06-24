@@ -22,6 +22,7 @@ import { ActivityAnalyticsPage } from '@/features/analytics/ActivityAnalyticsPag
 import { ProductsPage } from '@/features/settings/ProductsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { RolesPage } from '@/features/settings/RolesPage';
+import { OrgPage } from '@/features/settings/OrgPage';
 import { PlaceholderPage } from '@/features/settings/PlaceholderPage';
 import { SignPage } from '@/features/collab/SignPage';
 import { TicketsPage } from '@/features/collab/TicketsPage';
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       { path: 'analytics/activity', element: <ActivityAnalyticsPage /> },
       { path: 'settings/products', element: <ProductsPage /> },
       { path: 'settings/roles', element: <RolesPage /> },
+      { path: 'settings/org', element: <OrgPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'settings/company', element: <PlaceholderPage title="企业工商" /> },
       { path: 'sign', element: <SignPage /> },

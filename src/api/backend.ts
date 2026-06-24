@@ -200,7 +200,18 @@ export const qywxApi = {
   send: (toUserId: number | null, content: string) => post('/qywx/send', { toUserId, content }),
 };
 
-import type { PermissionItem, Role, UserRoles } from '@/types';
+import type { DeptMember, DeptNode, OrgInfo, PermissionItem, Role, UserRoles } from '@/types';
+export const orgApi = {
+  info: () => get<OrgInfo>('/org'),
+  updateInfo: (name: string) => put('/org', { name }),
+  departments: () => get<DeptNode[]>('/departments'),
+  createDept: (input: { name: string; parentId?: number }) => post<{ depId: number }>('/departments', input),
+  updateDept: (id: number, input: { name: string; parentId?: number }) => put(`/departments/${id}`, input),
+  removeDept: (id: number) => req(`/departments/${id}`, { method: 'DELETE' }),
+  members: (id: number) => get<DeptMember[]>(`/departments/${id}/members`),
+  moveUser: (userId: number, departmentId: number) => put(`/users/${userId}/department`, { departmentId }),
+};
+
 export const rolesApi = {
   permissions: () => get<PermissionItem[]>('/permissions'),
   list: () => get<Role[]>('/roles'),
