@@ -282,8 +282,9 @@ export const quotationsApi = {
     const row: any = {
       quotationId: id, code: `QT${new Date().getFullYear()}${String(id).padStart(4, '0')}`, version: 1,
       name: input.name, customerId: input.customerId, customerName: cust?.name, opportunityId: input.opportunityId,
+      quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm,
       currency: input.currency ?? 'CNY', status: 0, quoteType: input.quoteType ?? 2,
-      total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0',
+      total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0', otherChargesItems: input.otherChargesItems ?? [],
       discount: input.discount ?? '0', amount: amount.toFixed(2), cost: cost.toFixed(2),
       grossProfit: (amount - cost).toFixed(2), grossProfitRate: amount > 0 ? (((amount - cost) / amount) * 100).toFixed(1) : '0',
       comDiscountRate: total > 0 ? ((amount / total) * 100).toFixed(1) : '0', approval: -1, customerConfirmed: false,
@@ -293,7 +294,7 @@ export const quotationsApi = {
   },
   update: (id: number, input: any) => {
     const q = quotations.find((x) => x.quotationId === id) as any;
-    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, discount: input.discount });
+    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm });
     return delay(q);
   },
   confirm: (id: number) => {

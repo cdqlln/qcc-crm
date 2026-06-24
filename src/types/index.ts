@@ -176,6 +176,7 @@ export interface Quotation {
   bidderId?: number;
   quoteDate?: string;
   expiredDate?: string;
+  contractTerm?: number; // 合同限期（月）
   currency: string;
   status: 0 | 1 | 2 | 3; // 0初始 1报价中 2失效 3已生成合同
   quoteType?: 1 | 2 | 3 | 4; // 1询价 2报价 3标书 4框架协议
@@ -183,6 +184,7 @@ export interface Quotation {
   comDiscountRate: string;
   orderDiscountRate: string;
   otherCharges: string;
+  otherChargesItems?: { name: string; amount: number }[];
   discount: string;
   amount: string;
   cost: string;

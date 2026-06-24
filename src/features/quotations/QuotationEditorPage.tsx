@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, FileDown, Plus, Save, Send, Trash2 } from 'lucide-react';
-import { approvalsApi, customersApi, productsApi, quotationsApi } from '@/api/crm';
+import { approvalsApi, customersApi, opportunitiesApi, productsApi, quotationsApi } from '@/api/crm';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { MoneyText } from '@/components/ui/MoneyText';
@@ -46,13 +46,19 @@ export function QuotationEditorPage() {
   const { data: existingLines = [] } = useQuery({ queryKey: ['quotation-products', id], queryFn: () => quotationsApi.products(Number(id)), enabled: !isNew });
   // 新建时选择客户
   const { data: custPage } = useQuery({ queryKey: ['customers-pick'], queryFn: () => customersApi.list({ page: 1, pageSize: 200, tab: 'all' }), enabled: isNew });
+  const { data: oppPage } = useQuery({ queryKey: ['opps-pick'], queryFn: () => opportunitiesApi.list({ page: 1, pageSize: 300 }) });
 
   const [lines, setLines] = useState<Line[]>([]);
   const [orderDiscount, setOrderDiscount] = useState('1.00');
-  const [otherCharges, setOtherCharges] = useState('0');
+  const [ocItems, setOcItems] = useState<{ name: string; amount: string }[]>([]);
   const [discount, setDiscount] = useState('0');
+  const otherChargesTotal = ocItems.reduce((s, i) => add(s, i.amount || '0'), '0');
   const [quoteType, setQuoteType] = useState('1'); // 默认询价
   const [customerId, setCustomerId] = useState<number | undefined>();
+  const [opportunityId, setOpportunityId] = useState<number | undefined>();
+  const [quoteDate, setQuoteDate] = useState('');
+  const [expiredDate, setExpiredDate] = useState('');
+  const [contractTerm, setContractTerm] = useState('');
   const [name, setName] = useState('');
   const [seeded, setSeeded] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
@@ -88,9 +94,20 @@ export function QuotationEditorPage() {
       }),
     );
     if (existing) {
-      setOrderDiscount(existing.orderDiscountRate); setOtherCharges(existing.otherCharges);
+      setOrderDiscount(existing.orderDiscountRate);
+      setOcItems(
+        existing.otherChargesItems?.length
+          ? existing.otherChargesItems.map((i) => ({ name: i.name, amount: String(i.amount) }))
+          : Number(existing.otherCharges) > 0
+          ? [{ name: '其他费用', amount: existing.otherCharges }]
+          : [],
+      );
       setDiscount(existing.discount); setQuoteType(String(existing.quoteType ?? 2));
       setName(existing.name); setCustomerId(existing.customerId); setSavedId(existing.quotationId);
+      setOpportunityId(existing.opportunityId);
+      setQuoteDate((existing.quoteDate ?? '').slice(0, 10));
+      setExpiredDate((existing.expiredDate ?? '').slice(0, 10));
+      setContractTerm(existing.contractTerm != null ? String(existing.contractTerm) : '');
     }
     setSeeded(true);
   }
@@ -140,14 +157,14 @@ export function QuotationEditorPage() {
       const belowHard = d(effRate).lt(l.minDiscount);
       return { ...l, usage, salePrice, subtotal, lineCost, floor, effRate, belowAuthority, belowHard };
     });
-    const amount = sub(add(mul(total, orderDiscount), otherCharges), discount);
+    const amount = sub(add(mul(total, orderDiscount), otherChargesTotal), discount);
     const grossProfit = sub(amount, cost);
     const grossRate = rate(grossProfit, amount);
     const needApproval = rows.some((r) => r.belowAuthority);
     const hasHard = rows.some((r) => r.belowHard);
     const hasUsage = rows.some((r) => r.usage);
     return { rows, total, cost, amount, grossProfit, grossRate, needApproval, hasHard, hasUsage };
-  }, [lines, orderDiscount, otherCharges, discount, levelCap]);
+  }, [lines, orderDiscount, otherChargesTotal, discount, levelCap]);
 
   const lowMargin = Number(calc.grossRate) < GROSS_WARN && lines.length > 0;
   const isInquiry = quoteType === '1';
@@ -156,8 +173,11 @@ export function QuotationEditorPage() {
 
   const payload = () => ({
     name: name || `${customer?.name ?? ''} ${QUOTE_TYPE[Number(quoteType)].label}单`,
-    customerId: effCustomerId, quoteType: Number(quoteType), currency: 'CNY',
-    orderDiscountRate: orderDiscount, otherCharges, discount,
+    customerId: effCustomerId, opportunityId, quoteType: Number(quoteType), currency: 'CNY',
+    orderDiscountRate: orderDiscount, otherCharges: otherChargesTotal, discount,
+    otherChargesItems: ocItems.filter((i) => i.name.trim() || Number(i.amount) > 0).map((i) => ({ name: i.name, amount: Number(i.amount || 0) })),
+    quoteDate: quoteDate || undefined, expiredDate: expiredDate || undefined,
+    contractTerm: contractTerm ? Number(contractTerm) : undefined,
     lines: lines.map((l) => ({
       productId: l.productId, spec: l.spec, quantity: l.pricingMode === 'usage' ? 1 : l.quantity,
       price: l.price, discountRate: l.discountRate,
@@ -213,7 +233,7 @@ export function QuotationEditorPage() {
                   date: existing?.quoteDate,
                   currency: 'CNY',
                   lines: calc.rows.map((r) => ({ productName: r.productName, spec: r.spec, quantity: r.quantity, price: r.price, discountRate: r.discountRate, salePrice: r.salePrice, subtotal: r.subtotal, usage: r.usage })),
-                  total: calc.total, orderDiscount, otherCharges, discount, amount: calc.amount,
+                  total: calc.total, orderDiscount, otherCharges: otherChargesTotal, discount, amount: calc.amount,
                 });
                 if (!okPrint) toast('请允许弹出窗口以导出 PDF', 'error');
               }}
@@ -245,13 +265,43 @@ export function QuotationEditorPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-text">客户</label>
                 {isNew ? (
-                  <Select value={customerId ?? ''} onChange={(e) => setCustomerId(Number(e.target.value) || undefined)} className="w-56" invalid={!customerId}>
+                  <Select value={customerId ?? ''} onChange={(e) => { setCustomerId(Number(e.target.value) || undefined); setOpportunityId(undefined); }} className="w-56" invalid={!customerId}>
                     <option value="">请选择客户</option>
                     {(custPage?.list ?? []).map((c: Customer) => <option key={c.customerId} value={c.customerId}>{c.name}</option>)}
                   </Select>
                 ) : (
                   <span className="flex h-9 items-center text-sm text-text">{existing?.customerName ?? '—'}</span>
                 )}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-text">关联商机</label>
+                <Select
+                  value={opportunityId ?? ''}
+                  className="w-56"
+                  onChange={(e) => {
+                    const oid = Number(e.target.value) || undefined;
+                    setOpportunityId(oid);
+                    const opp = (oppPage?.list ?? []).find((o) => o.opportunityId === oid);
+                    if (opp) setCustomerId(opp.customerId); // 关联商机自动带出客户
+                  }}
+                >
+                  <option value="">不关联</option>
+                  {(oppPage?.list ?? []).filter((o) => !customerId || o.customerId === customerId).map((o) => (
+                    <option key={o.opportunityId} value={o.opportunityId}>{o.code} · {o.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-text">报价日期</label>
+                <input type="date" value={quoteDate} onChange={(e) => setQuoteDate(e.target.value)} className="h-9 w-40 rounded-md border border-border px-3 text-sm outline-none focus:border-primary" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-text">报价有效期</label>
+                <input type="date" value={expiredDate} onChange={(e) => setExpiredDate(e.target.value)} className="h-9 w-40 rounded-md border border-border px-3 text-sm outline-none focus:border-primary" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-text">合同限期(月)</label>
+                <input inputMode="numeric" value={contractTerm} onChange={(e) => setContractTerm(e.target.value.replace(/\D/g, ''))} placeholder="如 12" className="h-9 w-28 rounded-md border border-border px-3 text-sm tabular-nums outline-none focus:border-primary" />
               </div>
               {customer && (
                 <div className="rounded-md bg-bg px-3 py-1.5 text-xs text-text-weak">
@@ -341,8 +391,19 @@ export function QuotationEditorPage() {
                           ) : null}
                         </div>
                       </td>
-                      <td className="px-2 py-2 text-right tabular-nums">
-                        <div>{r.salePrice}{r.usage && <span className="ml-1 text-[10px] text-text-faint">/接口</span>}</div>
+                      <td className="px-2 py-2 text-right">
+                        <div className="flex flex-col items-end">
+                          <NumInput
+                            value={r.salePrice}
+                            width="w-20"
+                            onChange={(v) => {
+                              const sale = Number(v);
+                              const base = Number(r.price);
+                              update(r.id, { discountRate: base > 0 ? (sale / base).toFixed(4) : '1.0000' });
+                            }}
+                          />
+                          {r.usage && <span className="text-[10px] text-text-faint">接口单价</span>}
+                        </div>
                         {lastPriceMap.has(r.productId) && (
                           <div className={cn('text-[10px]', d(r.salePrice).lt(lastPriceMap.get(r.productId)!) ? 'text-danger' : 'text-text-faint')}>
                             上次 {lastPriceMap.get(r.productId)}
@@ -370,7 +431,27 @@ export function QuotationEditorPage() {
           <div className="space-y-3 p-4 text-sm">
             <Row label="产品合计" value={<MoneyText value={calc.total} strong />} />
             <EditRow label="整单折扣率" value={orderDiscount} onChange={setOrderDiscount} />
-            <EditRow label="其他费用" value={otherCharges} onChange={setOtherCharges} money />
+            {/* 其他费用明细：内容 + 金额 */}
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-text-weak">其他费用</span>
+                <button onClick={() => setOcItems((it) => [...it, { name: '', amount: '' }])} className="text-xs text-primary">+ 添加</button>
+              </div>
+              <div className="space-y-1.5">
+                {ocItems.map((it, i) => (
+                  <div key={i} className="flex items-center gap-1.5">
+                    <input value={it.name} onChange={(e) => setOcItems((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                      placeholder="费用内容(如实施/培训)" className="h-7 flex-1 rounded border border-border px-2 text-xs outline-none focus:border-primary" />
+                    <NumInput value={it.amount} width="w-20" onChange={(v) => setOcItems((arr) => arr.map((x, j) => (j === i ? { ...x, amount: v } : x)))} />
+                    <button onClick={() => setOcItems((arr) => arr.filter((_, j) => j !== i))} className="text-text-faint hover:text-danger"><Trash2 size={13} /></button>
+                  </div>
+                ))}
+                {ocItems.length === 0 && <div className="text-xs text-text-faint">无其他费用</div>}
+              </div>
+              {ocItems.length > 0 && (
+                <div className="mt-1 flex justify-between text-xs text-text-weak"><span>其他费用合计</span><MoneyText value={otherChargesTotal} /></div>
+              )}
+            </div>
             <EditRow label="优惠" value={discount} onChange={setDiscount} money />
             <div className="my-2 h-px bg-border" />
             <Row label="金额" value={<MoneyText value={calc.amount} strong className="text-lg text-primary" />} />
