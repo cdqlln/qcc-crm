@@ -466,6 +466,31 @@ export interface QywxMessage {
   createDate: string;
 }
 
+// ---- 字典配置 / 审计 ----
+export interface BizType { businessType: number; label: string }
+export interface DictItem {
+  termId: number;
+  businessType: number;
+  name: string;
+  kind?: string;
+  order?: number;
+  active: number;
+  systemLevel: boolean;
+}
+export interface AuditLog {
+  auditId: number;
+  userId?: number;
+  userName?: string;
+  action: string;
+  method: string;
+  path: string;
+  targetId?: string;
+  detail?: string;
+  ip?: string;
+  status: number;
+  createDate: string;
+}
+
 // ---- 组织/部门 ----
 export interface OrgInfo {
   organizationId: number;

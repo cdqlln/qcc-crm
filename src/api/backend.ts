@@ -216,7 +216,18 @@ export const qywxApi = {
   send: (toUserId: number | null, content: string) => post('/qywx/send', { toUserId, content }),
 };
 
-import type { DeptMember, DeptNode, OrgInfo, PermissionItem, Role, UserRoles } from '@/types';
+import type { AuditLog, BizType, DeptMember, DeptNode, DictItem, OrgInfo, PermissionItem, Role, UserRoles } from '@/types';
+
+export const dictApi = {
+  bizTypes: () => get<BizType[]>('/dict/biz-types'),
+  list: (businessType: number) => get<DictItem[]>(`/dict?businessType=${businessType}`),
+  create: (input: { businessType: number; name: string; kind?: string; order?: number }) => post<{ termId: number }>('/dict', input),
+  update: (id: number, input: { name?: string; kind?: string; order?: number; active?: number }) => put(`/dict/${id}`, input),
+  remove: (id: number) => req(`/dict/${id}`, { method: 'DELETE' }),
+};
+export const auditApi = {
+  list: (p: ListParams) => list<AuditLog>('/audit-logs', p),
+};
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),
   updateInfo: (name: string) => put('/org', { name }),

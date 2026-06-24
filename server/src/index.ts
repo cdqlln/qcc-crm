@@ -19,6 +19,8 @@ import { approvalsRouter } from './routes/approvals.js';
 import { rolesRouter } from './routes/roles.js';
 import { orgRouter } from './routes/org.js';
 import { uploadRouter, UPLOAD_DIR } from './routes/upload.js';
+import { adminRouter } from './routes/admin.js';
+import { auditMiddleware } from './audit.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth.js';
 
@@ -33,6 +35,9 @@ app.use(
 
 // 上传文件静态访问（图片需可直接 <img> 加载，故公开）
 app.use('/uploads', express.static(UPLOAD_DIR));
+
+// 审计中间件（写操作成功后留痕；置于路由前以注册 finish 回调）
+app.use(auditMiddleware);
 
 app.get('/health', async (_req, res) => {
   try {
@@ -66,6 +71,7 @@ api.use(approvalsRouter);
 api.use(rolesRouter);
 api.use(orgRouter);
 api.use(uploadRouter);
+api.use(adminRouter);
 app.use('/api/crm', api);
 
 // 404
