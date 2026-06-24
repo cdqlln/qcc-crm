@@ -16,6 +16,7 @@ import { aiRouter } from './routes/ai.js';
 import { searchRouter } from './routes/search.js';
 import { collabRouter } from './routes/collab.js';
 import { approvalsRouter } from './routes/approvals.js';
+import { rolesRouter } from './routes/roles.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth.js';
 
@@ -57,6 +58,7 @@ api.use(aiRouter);
 api.use(searchRouter);
 api.use(collabRouter);
 api.use(approvalsRouter);
+api.use(rolesRouter);
 app.use('/api/crm', api);
 
 // 404

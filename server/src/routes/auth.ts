@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { one } from '../db.js';
 import { ah, fail, ok } from '../http.js';
-import { requireAuth, signAccess, signRefresh, verifyToken, wecom, type AuthUser } from '../auth.js';
+import { getAuthz, requireAuth, signAccess, signRefresh, verifyToken, wecom, type AuthUser } from '../auth.js';
 
 export const authRouter = Router();
 
@@ -41,10 +41,15 @@ async function findByWecom(wecomId: string) {
   );
 }
 
-function issue(u: any) {
+async function issue(u: any) {
   const au: AuthUser = { userId: u.user_id, orgId: u.organization_id, name: u.name };
   const tv = Number(u.token_version ?? 0);
-  return { accessToken: signAccess(au, tv), refreshToken: signRefresh(u.user_id, tv), user: publicUser(u) };
+  const az = await getAuthz(u.user_id);
+  return {
+    accessToken: signAccess(au, tv),
+    refreshToken: signRefresh(u.user_id, tv),
+    user: { ...publicUser(u), scope: az.scope, permissions: az.permissions, isAdmin: az.isAdmin },
+  };
 }
 
 // 账号密码登录
@@ -59,7 +64,7 @@ authRouter.post(
     const okPwd = await bcrypt.compare(parsed.data.password, u.password_hash);
     if (!okPwd) return fail(res, '账号或密码错误', 1, 401);
     await one(`UPDATE app_user SET last_login_at=now() WHERE user_id=$1`, [u.user_id]);
-    ok(res, issue(u));
+    ok(res, await issue(u));
   }),
 );
 
@@ -68,9 +73,11 @@ authRouter.get(
   '/me',
   requireAuth,
   ah(async (req, res) => {
-    const u = await findById((req as any).user.userId);
+    const uid = (req as any).user.userId;
+    const u = await findById(uid);
     if (!u) return fail(res, '用户不存在', 1, 404);
-    ok(res, publicUser(u));
+    const az = await getAuthz(uid);
+    ok(res, { ...publicUser(u), scope: az.scope, permissions: az.permissions, isAdmin: az.isAdmin });
   }),
 );
 
@@ -86,7 +93,7 @@ authRouter.post(
       const u = await findById(Number(p.sub));
       if (!u || u.status !== 1) throw new Error('inactive');
       if (Number(p.tv ?? 0) !== Number(u.token_version ?? 0)) throw new Error('revoked');
-      ok(res, issue(u));
+      ok(res, await issue(u));
     } catch {
       return fail(res, '刷新令牌无效', 1, 401);
     }
@@ -113,7 +120,7 @@ authRouter.post(
       [hash, uid],
     );
     const u2 = await findById(updated.user_id);
-    ok(res, issue(u2)); // 返回新令牌，当前设备保持登录
+    ok(res, await issue(u2)); // 返回新令牌，当前设备保持登录
   }),
 );
 
@@ -191,6 +198,6 @@ authRouter.get(
     const u = await findByWecom(wecomId);
     if (!u) return sendHtml({ ok: false, msg: '该企业微信账号未绑定系统用户' });
     await one(`UPDATE app_user SET last_login_at=now() WHERE user_id=$1`, [u.user_id]);
-    sendHtml({ ok: true, ...issue(u) });
+    sendHtml({ ok: true, ...(await issue(u)) });
   }),
 );

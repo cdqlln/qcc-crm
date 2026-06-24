@@ -2,6 +2,7 @@
 import type { AuthUser, Session } from '@/store/auth';
 import { useAuth } from '@/store/auth';
 import { MOCK_USERS } from '@/mock/org';
+import { mockAuthz } from './mockRoles';
 
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? '';
 const USE_API = import.meta.env.VITE_API_BASE !== undefined;
@@ -39,6 +40,7 @@ const MOCK_LOGIN: Record<string, number> = {
 };
 function mockSession(userId: number): Session {
   const u = MOCK_USERS.find((x) => x.userId === userId) ?? MOCK_USERS[0];
+  const az = mockAuthz(u.userId);
   const user: AuthUser = {
     userId: u.userId,
     name: u.name,
@@ -47,6 +49,9 @@ function mockSession(userId: number): Session {
     depName: u.depName,
     position: u.position,
     organizationId: 1,
+    scope: az.scope,
+    permissions: az.permissions,
+    isAdmin: az.isAdmin,
   };
   return { accessToken: `mock.${u.userId}.${Date.now()}`, refreshToken: `mockr.${u.userId}`, user };
 }

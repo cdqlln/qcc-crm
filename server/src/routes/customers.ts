@@ -5,6 +5,7 @@ import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapContact, mapCustomer, mapTracking } from '../mappers.js';
 import { createApprovalTask } from './approvals.js';
+import { dataScopeCond } from '../auth.js';
 
 export const customersRouter = Router();
 
@@ -28,6 +29,8 @@ customersRouter.post(
     if (body.tab === 'sea') conds.push('category = 4');
     else if (body.tab === 'mine') conds.push('category = 3');
     else if (body.tab === 'deal') conds.push('status_term_id IN (12,13,14)');
+    const scope = await dataScopeCond(req, 'leader_id'); // 数据范围
+    if (scope) conds.push(scope);
 
     const result = await runList(
       {

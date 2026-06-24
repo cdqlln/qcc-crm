@@ -4,6 +4,7 @@ import { one, query } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapContract, mapInvoice, mapPayment } from '../mappers.js';
+import { dataScopeCond } from '../auth.js';
 
 export const contractsRouter = Router();
 
@@ -27,6 +28,8 @@ contractsRouter.post(
     const conds = ['ct.organization_id = $1'];
     if (body.tab === 'archived') conds.push('ct.archive = true');
     else if (body.tab === 'renew') conds.push('ct.renew_type = 2');
+    const scope = await dataScopeCond(req, 'ct.leader_id');
+    if (scope) conds.push(scope);
 
     const result = await runList(
       {

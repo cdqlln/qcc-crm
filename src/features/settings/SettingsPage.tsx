@@ -7,14 +7,15 @@ import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { useTermsMap } from '@/hooks/useTerms';
 import { quotationsApi } from '@/api/crm';
 import { useUI } from '@/store/ui';
+import { usePerm } from '@/store/auth';
 import type { DiscountPolicy } from '@/types';
 
 const ITEMS = [
-  { icon: Building2, title: '组织 / 部门', desc: 'organization · department 部门树', path: '/settings' },
-  { icon: Shield, title: '角色 / 权限', desc: 'role.scope 数据范围 + permission', path: '/settings' },
-  { icon: SlidersHorizontal, title: '字段配置', desc: '列表列显隐 / 自定义字段', path: '/settings' },
-  { icon: Workflow, title: '审批流', desc: 'work_flow_route / task / form', path: '/settings' },
-  { icon: Tags, title: '字典管理', desc: 'terms 来源/阶段/状态/分类', path: '/settings' },
+  { icon: Building2, title: '组织 / 部门', desc: 'organization · department 部门树', path: '/settings', perm: 'system.org' },
+  { icon: Shield, title: '角色 / 权限', desc: 'RBAC 权限点 + 数据范围 + 成员分配', path: '/settings/roles', perm: 'system.role' },
+  { icon: SlidersHorizontal, title: '字段配置', desc: '列表列显隐 / 自定义字段', path: '/settings', perm: 'system.dict' },
+  { icon: Workflow, title: '审批流', desc: 'work_flow_route / task / form', path: '/settings', perm: 'system.role' },
+  { icon: Tags, title: '字典管理', desc: 'terms 来源/阶段/状态/分类', path: '/settings', perm: 'system.dict' },
   { icon: ListTree, title: '产品目录', desc: 'product / category / 多币种', path: '/settings/products' },
   { icon: FileCheck2, title: '公海 / 线索池规则', desc: 'pool_rule 领取上限/掉保', path: '/settings' },
   { icon: Languages, title: '国际化 / 币种', desc: 'i18next 中英 + currency_setting', path: '/settings' },
@@ -22,11 +23,12 @@ const ITEMS = [
 
 export function SettingsPage() {
   const terms = useTermsMap();
+  const { can } = usePerm();
   return (
     <div>
       <PageHeader title="设置" description="组织 / 角色 / 字段 / 审批流 / 字典 / 产品 —— 多租户与权限基座（§9）" />
       <div className="grid grid-cols-3 gap-4">
-        {ITEMS.map((it) => (
+        {ITEMS.filter((it) => !it.perm || can(it.perm)).map((it) => (
           <Link key={it.title} to={it.path}>
             <Card className="flex items-start gap-3 p-4 transition-colors hover:border-primary/40">
               <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-weak text-primary">

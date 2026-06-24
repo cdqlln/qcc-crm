@@ -197,3 +197,15 @@ export const qywxApi = {
   list: (p: ListParams) => list<QywxMessage>('/qywx/list', p),
   send: (toUserId: number | null, content: string) => post('/qywx/send', { toUserId, content }),
 };
+
+import type { PermissionItem, Role, UserRoles } from '@/types';
+export const rolesApi = {
+  permissions: () => get<PermissionItem[]>('/permissions'),
+  list: () => get<Role[]>('/roles'),
+  create: (input: { name: string; scope: number }) => post<{ roleId: number }>('/roles', input),
+  update: (id: number, input: { name: string; scope: number }) => put(`/roles/${id}`, input),
+  remove: (id: number) => req(`/roles/${id}`, { method: 'DELETE' }),
+  setPermissions: (id: number, codes: string[]) => put(`/roles/${id}/permissions`, { codes }),
+  usersRoles: () => get<UserRoles[]>('/users-roles'),
+  setUserRoles: (userId: number, roleIds: number[]) => put(`/users/${userId}/roles`, { roleIds }),
+};

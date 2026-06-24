@@ -449,6 +449,29 @@ export interface QywxMessage {
   createDate: string;
 }
 
+// ---- RBAC ----
+export interface PermissionItem {
+  permissionId: number;
+  code: string;
+  name: string;
+  module: string;
+  type: number;
+}
+export interface Role {
+  roleId: number;
+  name: string;
+  scope: number;
+  scopeName?: string;
+  permissions: string[];
+  userCount: number;
+}
+export interface UserRoles {
+  userId: number;
+  name: string;
+  depName?: string;
+  roleIds: number[];
+}
+
 export interface AiReportContent {
   summary: string;
   points: string[];

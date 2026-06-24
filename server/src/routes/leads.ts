@@ -4,6 +4,7 @@ import { one, query } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapCustomer } from '../mappers.js';
+import { dataScopeCond } from '../auth.js';
 
 export const leadsRouter = Router();
 
@@ -26,6 +27,8 @@ leadsRouter.post(
     if (body.tab === 'pool') conds.push('category = 2');
     else if (body.tab === 'mine') conds.push('category = 1');
     else if (body.tab === 'converted') conds.push('status_term_id = 17');
+    const scope = await dataScopeCond(req, 'leader_id'); // 数据范围（线索池对所有人可见以便领取）
+    if (scope) conds.push(`(category = 2 OR ${scope})`);
 
     const result = await runList(
       {

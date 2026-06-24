@@ -10,6 +10,9 @@ export interface AuthUser {
   position?: number;
   organizationId: number;
   avatar?: string | null;
+  scope?: number;
+  permissions?: string[];
+  isAdmin?: boolean;
 }
 
 export interface Session {
@@ -25,6 +28,7 @@ interface AuthState {
   isAuthed: boolean;
   setSession: (s: Session) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
+  setUser: (user: AuthUser) => void;
   clear: () => void;
 }
 
@@ -63,11 +67,22 @@ export const useAuth = create<AuthState>((set, get) => ({
     persist({ accessToken, refreshToken, user });
     set({ accessToken, refreshToken });
   },
+  setUser: (user) => {
+    persist({ accessToken: get().accessToken, refreshToken: get().refreshToken, user });
+    set({ user });
+  },
   clear: () => {
     localStorage.removeItem(LS);
     set({ accessToken: null, refreshToken: null, user: null, isAuthed: false });
   },
 }));
+
+// 权限判断 hook：管理员放行；否则需具备指定权限码
+export function usePerm() {
+  const user = useAuth((s) => s.user);
+  const can = (code: string) => !!user && (user.isAdmin || (user.permissions ?? []).includes(code));
+  return { can, isAdmin: !!user?.isAdmin, scope: user?.scope ?? 1 };
+}
 
 // 供非组件代码（fetch 拦截器）读取/失效
 export const authStore = {

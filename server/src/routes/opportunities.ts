@@ -4,6 +4,7 @@ import { one } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapOpportunity } from '../mappers.js';
+import { dataScopeCond } from '../auth.js';
 
 export const opportunitiesRouter = Router();
 
@@ -22,6 +23,9 @@ opportunitiesRouter.post(
   ah(async (req, res) => {
     const { orgId } = ctx(req);
     const body = parseList(req);
+    const conds = ['o.organization_id = $1', 'o.active = 1'];
+    const scope = await dataScopeCond(req, 'o.leader_id');
+    if (scope) conds.push(scope);
     const result = await runList(
       {
         table: TABLE,
@@ -30,7 +34,7 @@ opportunitiesRouter.post(
         filterMap: FILTERS,
         sortMap: { estimatedAmount: 'o.estimated_amount', allStayTime: 'o.all_stay_time' },
         defaultOrder: 'o.created_at DESC',
-        baseConds: ['o.organization_id = $1', 'o.active = 1'],
+        baseConds: conds,
         baseParams: [orgId],
         mapRow: mapOpportunity,
       },

@@ -1,5 +1,8 @@
+import { useEffect } from 'react';
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
+import { authApi } from '@/api/auth';
+import { useAuth } from '@/store/auth';
 import { TopBar } from './TopBar';
 import { SideNav } from './SideNav';
 import { CommandPalette } from './CommandPalette';
@@ -53,6 +56,12 @@ function Breadcrumb() {
 
 // §3.2 AppShell 全局壳层
 export function AppShell() {
+  const setUser = useAuth((s) => s.setUser);
+  // 启动刷新当前用户的权限/数据范围（角色变更后即时生效）
+  useEffect(() => {
+    authApi.me().then((u) => setUser(u as any)).catch(() => {});
+  }, [setUser]);
+
   return (
     <div className="flex h-screen flex-col">
       <TopBar />

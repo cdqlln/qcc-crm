@@ -4,6 +4,7 @@
 import * as mock from './mock';
 import * as backend from './backend';
 import * as mockCollab from './mockCollab';
+import * as mockRoles from './mockRoles';
 
 // VITE_API_BASE 已定义（含空串=同源 /api，配合 nginx 反代）即启用后端
 const USE_API = import.meta.env.VITE_API_BASE !== undefined;
@@ -28,6 +29,7 @@ export const signApi = USE_API ? backend.signApi : mockCollab.signApi;
 export const ticketsApi = USE_API ? backend.ticketsApi : mockCollab.ticketsApi;
 export const approvalsApi = (USE_API ? backend.approvalsApi : mockCollab.approvalsApi) as typeof backend.approvalsApi;
 export const qywxApi = USE_API ? backend.qywxApi : mockCollab.qywxApi;
+export const rolesApi = USE_API ? backend.rolesApi : mockRoles.rolesApi;
 
 // 分析页/弹窗就地聚合使用的内存数据集（始终来自 mock；接入后端后分析页可改为聚合接口）
 export {
