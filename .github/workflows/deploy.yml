@@ -1,22 +1,23 @@
 name: Deploy NextCRM
 
-# 推送到部署分支即自动构建并 rsync 到服务器。
-# 需在仓库 Settings → Secrets and variables → Actions 配置：
-#   SSH_HOST        服务器地址，如 1.2.3.4
-#   SSH_USER        登录用户，如 deploy
-#   SSH_PORT        SSH 端口（可选，默认 22）
-#   SSH_PRIVATE_KEY 部署用私钥（建议单独生成一把，仅授权该用途）
-#   DEPLOY_PATH     远端静态目录，如 /var/www/nextcrm
+# 推送到 main 分支即在 self-hosted Runner 上自动构建并打包 Docker 镜像。
+# 流水线步骤：
+#   1. checkout 源码
+#   2. 安装依赖并执行 npm run build 产出 dist/
+#   3. 基于 deploy/Dockerfile.runtime 构建运行时 nginx 镜像
 
 on:
   push:
     branches:
-      - claude/admiring-clarke-mZ979
+      - main
   workflow_dispatch:
 
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+  deploy:
+    runs-on: self-hosted
+    env:
+      IMAGE_NAME: nextcrm
+      IMAGE_TAG: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,18 +26,26 @@ jobs:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-      - run: npm run build
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_deploy
-          chmod 600 ~/.ssh/id_deploy
-          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
+      - name: Build dist
+        run: npm run build
 
-      - name: Rsync to server
+      - name: Build Docker image
         run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/id_deploy -p ${{ secrets.SSH_PORT || 22 }}" \
-            dist/ "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+          docker build \
+            -f deploy/Dockerfile.runtime \
+            -t ${IMAGE_NAME}:${IMAGE_TAG} \
+            -t ${IMAGE_NAME}:latest \
+            .
+
+      - name: Run Docker container
+        run: |
+          # 停止并移除已有同名容器，避免 80 端口占用
+          docker rm -f ${IMAGE_NAME} 2>/dev/null || true
+          docker run -d \
+            --name ${IMAGE_NAME} \
+            --restart unless-stopped \
+            -p 80:80 \
+            ${IMAGE_NAME}:${IMAGE_TAG}
