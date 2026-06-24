@@ -26,6 +26,8 @@ export const mapCustomer = (r: any) => ({
   preLeaderId: r.pre_leader_id,
   loseTime: r.lose_time,
   opportunityCount: r.opportunity_count,
+  groupId: r.group_id,
+  groupName: r.group_name,
   claimAt: r.claim_at,
   assignAt: r.assign_at,
   utmSource: r.utm_source,

@@ -239,6 +239,16 @@ export const orgApi = {
   moveUser: (userId: number, departmentId: number) => put(`/users/${userId}/department`, { departmentId }),
 };
 
+import type { CustomerGroup } from '@/types';
+export const groupsApi = {
+  list: () => get<CustomerGroup[]>('/customer-groups'),
+  create: (input: { name: string; matchKey?: string; refCompanyId?: string }) => post<{ groupId: number; attached: number }>('/customer-groups', input),
+  update: (id: number, input: { name: string; matchKey?: string }) => put(`/customer-groups/${id}`, input),
+  remove: (id: number) => req(`/customer-groups/${id}`, { method: 'DELETE' }),
+  members: (id: number) => get<Customer[]>(`/customer-groups/${id}/members`),
+  setCustomerGroup: (customerId: number, groupId: number | null) => put(`/customers/${customerId}/group`, { groupId }),
+};
+
 export const rolesApi = {
   permissions: () => get<PermissionItem[]>('/permissions'),
   list: () => get<Role[]>('/roles'),

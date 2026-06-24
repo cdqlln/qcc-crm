@@ -53,7 +53,11 @@ customersRouter.get(
   '/customers/:id',
   ah(async (req, res) => {
     const { orgId } = ctx(req);
-    const row = await one(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+    const row = await one(
+      `SELECT c.*, g.name AS group_name FROM customer c LEFT JOIN customer_group g ON g.group_id=c.group_id
+       WHERE c.customer_id=$1 AND c.organization_id=$2`,
+      [req.params.id, orgId],
+    );
     if (!row) return fail(res, '客户不存在', 1, 404);
     ok(res, mapCustomer(row));
   }),
@@ -205,6 +209,12 @@ customersRouter.post(
        VALUES ($1,$2,3,8,$3,$4,$5,$6,$7,$8,$9,$10, now()) RETURNING *`,
       [orgId, d.name, d.level, d.source, d.industry ?? null, d.phoneName ?? null, d.phone ?? null, d.email ?? null, d.leaderId, userId],
     );
-    ok(res, mapCustomer(row));
+    // 按字号自动归属集团
+    const g = await one<any>(
+      `SELECT group_id FROM customer_group WHERE organization_id=$1 AND match_key IS NOT NULL AND $2 ILIKE '%'||match_key||'%' LIMIT 1`,
+      [orgId, d.name],
+    );
+    if (g) await one(`UPDATE customer SET group_id=$1 WHERE customer_id=$2`, [g.group_id, (row as any).customer_id]);
+    ok(res, mapCustomer({ ...row, group_id: g?.group_id }));
   }),
 );

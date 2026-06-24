@@ -81,6 +81,8 @@ export interface Customer {
   utmMedium?: string;
   utmCampaign?: string;
   opportunityCount?: number;
+  groupId?: number | null;
+  groupName?: string;
   approval: ApprovalStatus;
   active: -1 | 0 | 1 | 2;
   createDate?: string;
@@ -464,6 +466,15 @@ export interface QywxMessage {
   channel: string;
   status: number;
   createDate: string;
+}
+
+// ---- 集团客户 ----
+export interface CustomerGroup {
+  groupId: number;
+  name: string;
+  matchKey?: string;
+  refCompanyId?: string;
+  memberCount: number;
 }
 
 // ---- 字典配置 / 审计 ----

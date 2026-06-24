@@ -1,22 +1,23 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Building2,
   CalendarPlus,
   FilePlus2,
   MapPin,
+  Network,
   PlusCircle,
   ShieldAlert,
   UserCog,
 } from 'lucide-react';
-import { contracts, customersApi, opportunities, quotations } from '@/api/crm';
+import { contracts, customersApi, groupsApi, opportunities, quotations } from '@/api/crm';
 import { Tabs } from '@/components/ui/Tabs';
 import { Button, Avatar, UserCell } from '@/components/ui/primitives';
 import { Card, CardHeader } from '@/components/ui/primitives';
 import { Dialog } from '@/components/ui/Dialog';
-import { Field, Select, TextArea } from '@/components/ui/form';
+import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { MOCK_USERS } from '@/mock/org';
 import { Descriptions } from '@/components/ui/Descriptions';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
@@ -32,7 +33,7 @@ import { useCreate } from '@/store/create';
 import { useTerm } from '@/hooks/useTerms';
 import { userName } from '@/mock/org';
 import { formatDate } from '@/lib/format';
-import type { Contract, Opportunity, Quotation } from '@/types';
+import type { Contract, Customer, Opportunity, Quotation } from '@/types';
 
 export function CustomerDetailPage() {
   const { id } = useParams();
@@ -127,6 +128,7 @@ export function CustomerDetailPage() {
                     <Metric label="跟进次数" value={String(cust.trackingNum)} />
                   </div>
                 </Section>
+                <GroupSection cust={cust} />
               </div>
               <div>
                 <Section title="风险标签">
@@ -260,6 +262,82 @@ function ActivityTab({ customerId }: { customerId: number }) {
         body: a.summary,
       }))}
     />
+  );
+}
+
+// 集团归属：显示所属集团与同集团客户，支持人工调整
+function GroupSection({ cust }: { cust: Customer }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const { data: members = [] } = useQuery({
+    queryKey: ['group-members', cust.groupId],
+    queryFn: () => groupsApi.members(cust.groupId!),
+    enabled: !!cust.groupId,
+  });
+  const siblings = members.filter((m) => m.customerId !== cust.customerId);
+  return (
+    <Section title="集团归属">
+      <div className="rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            {cust.groupName ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-text"><Network size={14} className="text-primary" />{cust.groupName}</span>
+            ) : (
+              <span className="text-text-faint">未归属集团</span>
+            )}
+          </div>
+          <Button size="sm" onClick={() => setOpen(true)}><Network size={13} />调整集团</Button>
+        </div>
+        {cust.groupId && (
+          <div className="mt-2 text-sm text-text-weak">
+            同集团客户（{siblings.length}）：
+            {siblings.length === 0 ? <span className="text-text-faint">无</span> : siblings.map((m) => (
+              <button key={m.customerId} onClick={() => navigate(`/customers/${m.customerId}`)} className="mr-2 text-primary hover:underline">{m.name}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      {open && <GroupDialog cust={cust} onClose={() => setOpen(false)} />}
+    </Section>
+  );
+}
+
+function GroupDialog({ cust, onClose }: { cust: Customer; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const { data: groups = [] } = useQuery({ queryKey: ['groups'], queryFn: () => groupsApi.list() });
+  const [groupId, setGroupId] = useState<string>(cust.groupId ? String(cust.groupId) : '');
+  const [newName, setNewName] = useState('');
+  const [matchKey, setMatchKey] = useState('');
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['customer', cust.customerId] }); qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['group-members'] }); };
+  const save = async () => {
+    if (newName.trim()) {
+      const r = await groupsApi.create({ name: newName.trim(), matchKey: matchKey.trim() || undefined });
+      await groupsApi.setCustomerGroup(cust.customerId, r.groupId);
+      toast(`已创建集团并归属${r.attached ? `，自动归集 ${r.attached} 个客户` : ''}`, 'success');
+    } else {
+      await groupsApi.setCustomerGroup(cust.customerId, groupId ? Number(groupId) : null);
+      toast(groupId ? '已调整集团归属' : '已移出集团', 'success');
+    }
+    refresh(); onClose();
+  };
+  return (
+    <Dialog open onClose={onClose} title="调整集团归属" width="w-[460px]"
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={save}>保存</Button></>}>
+      <div className="space-y-4">
+        <Field label="归属到现有集团">
+          <Select value={groupId} onChange={(e) => { setGroupId(e.target.value); setNewName(''); }}>
+            <option value="">（不归属 / 移出集团）</option>
+            {groups.map((g) => <option key={g.groupId} value={g.groupId}>{g.name}（{g.memberCount}）</option>)}
+          </Select>
+        </Field>
+        <div className="text-center text-xs text-text-faint">或 新建集团（按字号自动归集同名客户）</div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="集团名称"><TextInput value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="如：星辰云图集团" /></Field>
+          <Field label="字号关键字" hint="客户名含此词自动归属"><TextInput value={matchKey} onChange={(e) => setMatchKey(e.target.value)} placeholder="如：星辰云图" /></Field>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
