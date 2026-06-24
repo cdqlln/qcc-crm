@@ -27,7 +27,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --registry=https://registry.npmmirror.com
 
       - name: Build dist
         run: npm run build
