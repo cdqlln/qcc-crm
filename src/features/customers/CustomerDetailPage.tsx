@@ -188,12 +188,7 @@ export function CustomerDetailPage() {
               <div className="text-sm text-text-weak">风险监控（customer_risk_monitor）：经营异常 0 项 · 司法案件 1 项 · 行政处罚 0 项</div>
             </div>
           )}
-          {tab === 'dynamic' && (
-            <Timeline items={[
-              { id: 1, icon: <Activity size={12} />, title: '工商信息更新', meta: formatDate(cust.createDate), body: '注册资本变更' },
-              { id: 2, title: '新增联系人', meta: formatDate(cust.trackingUpdateDate), kind: 'success' },
-            ]} />
-          )}
+          {tab === 'dynamic' && <ActivityTab customerId={cid} />}
           {tab === 'ai' && (
             <div className="-m-5 h-[560px]">
               <AiPanel businessType={1} businessId={cid} />
@@ -243,6 +238,26 @@ function TransferDialog({ customerId, currentLeaderId, onClose }: { customerId: 
         <Field label="移交原因"><TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="如：区域调整 / 离职交接" /></Field>
       </div>
     </Dialog>
+  );
+}
+
+const ACT_KIND: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'neutral'> = {
+  customer: 'neutral', tracking: 'info', opportunity: 'warning', quotation: 'info', contract: 'success', invoice: 'success',
+};
+function ActivityTab({ customerId }: { customerId: number }) {
+  const { data = [], isLoading } = useQuery({ queryKey: ['activities', customerId], queryFn: () => customersApi.activities(customerId) });
+  if (isLoading) return <TableSkeleton rows={5} cols={1} />;
+  if (data.length === 0) return <EmptyState title="暂无动态" description="客户的新增线索/商机/报价/合同/开票等行为将在此汇总" />;
+  return (
+    <Timeline
+      items={data.map((a, i) => ({
+        id: i,
+        kind: ACT_KIND[a.kind] ?? 'neutral',
+        title: a.title,
+        meta: `${a.operator ?? '系统'} · ${formatDate(a.date, 'YYYY-MM-DD HH:mm')}`,
+        body: a.summary,
+      }))}
+    />
   );
 }
 

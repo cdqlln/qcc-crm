@@ -16,6 +16,7 @@ import {
   trackings,
 } from '@/mock/data';
 import { MOCK_TERMS } from '@/mock/terms';
+import { userName } from '@/mock/org';
 import { delay, paginate, type ListParams } from './client';
 import type {
   BackLog,
@@ -138,6 +139,23 @@ export const customersApi = {
         .filter((t) => t.customerId === customerId)
         .sort((a, b) => b.createDate.localeCompare(a.createDate)),
     ),
+  activities: (customerId: number) => {
+    const ev: { kind: string; title: string; summary: string; operator?: string; date: string }[] = [];
+    const c = customers.find((x) => x.customerId === customerId);
+    if (c) ev.push({ kind: 'customer', title: '新增客户', summary: c.name, operator: userName(c.leaderId), date: c.createDate ?? dayjs().toISOString() });
+    for (const t of trackings.filter((x) => x.customerId === customerId))
+      ev.push({ kind: 'tracking', title: '跟进记录', summary: (t.comment ?? '').slice(0, 50), operator: userName(t.createBy), date: t.createDate });
+    for (const o of opportunities.filter((x) => x.customerId === customerId))
+      ev.push({ kind: 'opportunity', title: '新增商机', summary: `${o.name} · 预计 ¥${o.estimatedAmount}`, operator: userName(o.leaderId), date: o.createDate ?? dayjs().toISOString() });
+    for (const qq of quotations.filter((x) => x.customerId === customerId))
+      ev.push({ kind: 'quotation', title: '新增报价', summary: `${qq.code} · ¥${qq.amount}`, operator: userName((qq as any).bidderId), date: (qq as any).quoteDate ?? dayjs().toISOString() });
+    for (const ct of contracts.filter((x) => x.customerId === customerId))
+      ev.push({ kind: 'contract', title: '新增合同', summary: `${ct.code} · ¥${ct.amount}`, operator: userName(ct.leaderId), date: dayjs().toISOString() });
+    for (const iv of invoices.filter((x) => x.customerId === customerId))
+      ev.push({ kind: 'invoice', title: '开票', summary: `${iv.code ?? '发票'} · ¥${iv.amount}`, date: iv.createDate ?? dayjs().toISOString() });
+    ev.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+    return delay(ev.slice(0, 100));
+  },
   createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number }) => {
     const row: any = {
       trackingId: nextId(trackings, 'trackingId'), customerId, businessType: 1, trackingType: input.trackingType,

@@ -94,6 +94,8 @@ export const customersApi = {
   get: (id: number) => get<Customer>(`/customers/${id}`),
   contacts: (customerId: number) => get<Contact[]>(`/customers/${customerId}/contacts`),
   trackings: (customerId: number) => get<Tracking[]>(`/customers/${customerId}/trackings`),
+  activities: (customerId: number) =>
+    get<{ kind: string; title: string; summary: string; operator?: string; date: string }[]>(`/customers/${customerId}/activities`),
   createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number }) =>
     post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),

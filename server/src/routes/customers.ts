@@ -75,6 +75,33 @@ customersRouter.get(
   }),
 );
 
+// 客户动态：聚合 CRM 行为（建客户/跟进/商机/报价/合同/开票/回款），含操作人与概况
+customersRouter.get(
+  '/customers/:id/activities',
+  ah(async (req, res) => {
+    const rows = await query(
+      `SELECT t.kind, t.title, t.summary, t.at, u.name AS operator
+       FROM (
+         SELECT 'customer' kind, '新增客户' title, name summary, created_by op, created_at at FROM customer WHERE customer_id=$1
+         UNION ALL
+         SELECT 'tracking','跟进记录', left(comment, 50), created_by, created_at FROM customer_tracking WHERE customer_id=$1
+         UNION ALL
+         SELECT 'opportunity','新增商机', name || ' · 预计 ¥' || estimated_amount::text, leader_id, created_at FROM opportunity WHERE customer_id=$1
+         UNION ALL
+         SELECT 'quotation','新增报价', code || ' · ¥' || amount::text, bidder_id, created_at FROM quotation WHERE customer_id=$1
+         UNION ALL
+         SELECT 'contract','新增合同', code || ' · ¥' || amount::text, leader_id, created_at FROM contract WHERE customer_id=$1
+         UNION ALL
+         SELECT 'invoice','开票', COALESCE(code,'发票') || ' · ¥' || amount::text, NULL::bigint, created_at FROM invoice WHERE customer_id=$1
+       ) t LEFT JOIN app_user u ON u.user_id = t.op
+       ORDER BY t.at DESC NULLS LAST
+       LIMIT 100`,
+      [req.params.id],
+    );
+    ok(res, rows.map((r: any) => ({ kind: r.kind, title: r.title, summary: r.summary, operator: r.operator, date: r.at })));
+  }),
+);
+
 // 写跟进记录（线索/客户共用）；可联动下次跟进 + 写待办（#5/#20/#23）
 customersRouter.post(
   '/customers/:id/trackings',
