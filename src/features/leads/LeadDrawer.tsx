@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRightLeft, Briefcase, Phone } from 'lucide-react';
-import { customersApi, leadsApi } from '@/api/crm';
+import { Paperclip } from 'lucide-react';
+import { customersApi, leadsApi, uploadApi } from '@/api/crm';
 import { Drawer } from '@/components/ui/Drawer';
 import { Tabs } from '@/components/ui/Tabs';
 import { Button, UserCell } from '@/components/ui/primitives';
 import { Descriptions } from '@/components/ui/Descriptions';
+import { Attachments, AttachmentDrafts } from '@/components/ui/Attachments';
 import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
@@ -117,6 +119,24 @@ function FollowUpForm({ customerId, onDone }: { customerId: number; onDone: () =
   const [type, setType] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<import('@/types').Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  const onPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (!picked.length) return;
+    setUploading(true);
+    try {
+      const up = await uploadApi.upload(picked);
+      setFiles((f) => [...f, ...up]);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '上传失败', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const submit = async () => {
     if (!comment.trim()) return toast('请填写跟进内容', 'error');
     setBusy(true);
@@ -125,9 +145,10 @@ function FollowUpForm({ customerId, onDone }: { customerId: number; onDone: () =
         comment: comment.trim(),
         trackingType: type ? Number(type) : undefined,
         nextTrackingDate: next || undefined,
+        attachments: files,
       });
       toast(next ? '跟进已记录，已生成下次跟进待办' : '跟进已记录', 'success');
-      setComment(''); setType(''); setNext('');
+      setComment(''); setType(''); setNext(''); setFiles([]);
       onDone();
     } catch (e) {
       toast(e instanceof Error ? e.message : '提交失败', 'error');
@@ -147,7 +168,14 @@ function FollowUpForm({ customerId, onDone }: { customerId: number; onDone: () =
         <Field label="下次跟进时间"><TextInput type="date" value={next} onChange={(e) => setNext(e.target.value)} /></Field>
       </div>
       <Field label="跟进内容"><TextArea value={comment} onChange={(e) => setComment(e.target.value)} placeholder="记录沟通要点…" /></Field>
-      <div className="flex justify-end"><Button variant="primary" onClick={submit} disabled={busy}>保存跟进</Button></div>
+      <AttachmentDrafts items={files} onRemove={(i) => setFiles((f) => f.filter((_, x) => x !== i))} />
+      <div className="flex items-center justify-between">
+        <label className="inline-flex cursor-pointer items-center gap-1.5 text-sm text-text-weak hover:text-primary">
+          <Paperclip size={14} />{uploading ? '上传中…' : '附件/图片'}
+          <input type="file" multiple className="hidden" onChange={onPick} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt" />
+        </label>
+        <Button variant="primary" onClick={submit} disabled={busy || uploading}>保存跟进</Button>
+      </div>
     </div>
   );
 }
@@ -206,6 +234,7 @@ function TrackingTab({ customerId }: { customerId: number }) {
         body: (
           <div>
             <p>{t.comment}</p>
+            <Attachments items={t.attachments} />
             {t.nextTrackingDate && (
               <p className="mt-1 text-xs text-warning">下次跟进：{formatDate(t.nextTrackingDate)}</p>
             )}

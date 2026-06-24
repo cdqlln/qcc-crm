@@ -40,6 +40,21 @@ export const termsApi = {
   all: () => delay<Term[]>(MOCK_TERMS, 120),
 };
 
+// 附件上传（Mock：读为 dataURL，便于本地预览/下载）
+export const uploadApi = {
+  upload: (files: File[]) =>
+    Promise.all(
+      files.map(
+        (f) =>
+          new Promise<{ name: string; url: string; mime: string; size: number }>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ name: f.name, url: String(reader.result), mime: f.type, size: f.size });
+            reader.readAsDataURL(f);
+          }),
+      ),
+    ),
+};
+
 // ---------- 线索 §6.2 ----------
 export const leadsApi = {
   list: (p: ListParams) => {
@@ -156,10 +171,11 @@ export const customersApi = {
     ev.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
     return delay(ev.slice(0, 100));
   },
-  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number }) => {
+  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number; attachments?: any[] }) => {
     const row: any = {
       trackingId: nextId(trackings, 'trackingId'), customerId, businessType: 1, trackingType: input.trackingType,
       comment: input.comment, nextTrackingDate: input.nextTrackingDate, priorityLevel: input.priorityLevel ?? 1,
+      attachments: input.attachments ?? [],
       createBy: 1, createDate: dayjs().toISOString(),
     };
     trackings.unshift(row);

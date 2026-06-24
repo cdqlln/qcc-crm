@@ -21,6 +21,7 @@ import { MOCK_USERS } from '@/mock/org';
 import { Descriptions } from '@/components/ui/Descriptions';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
+import { Attachments } from '@/components/ui/Attachments';
 import { MoneyText } from '@/components/ui/MoneyText';
 import { StatusTag } from '@/components/ui/StatusTag';
 import { AiPanel } from '@/components/ai/AiPanel';
@@ -170,6 +171,7 @@ export function CustomerDetailPage() {
                   body: (
                     <div>
                       <p>{t.comment}</p>
+                      <Attachments items={t.attachments} />
                       {t.nextTrackingDate && <p className="mt-1 text-xs text-warning">下次跟进：{formatDate(t.nextTrackingDate)}</p>}
                     </div>
                   ),

@@ -60,6 +60,7 @@ export const mapTracking = (r: any) => ({
   nextTrackingDate: r.next_tracking_at,
   priorityLevel: r.priority_level,
   ding: r.ding ?? [],
+  attachments: r.attachments ?? [],
   createBy: r.created_by,
   createDate: r.created_at,
 });

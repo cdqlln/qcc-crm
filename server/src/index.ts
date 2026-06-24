@@ -18,6 +18,7 @@ import { collabRouter } from './routes/collab.js';
 import { approvalsRouter } from './routes/approvals.js';
 import { rolesRouter } from './routes/roles.js';
 import { orgRouter } from './routes/org.js';
+import { uploadRouter, UPLOAD_DIR } from './routes/upload.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth.js';
 
@@ -29,6 +30,9 @@ app.use(
     allowedHeaders: ['Content-Type', 'Authorization', 'x-org-id', 'x-user-id'],
   }),
 );
+
+// 上传文件静态访问（图片需可直接 <img> 加载，故公开）
+app.use('/uploads', express.static(UPLOAD_DIR));
 
 app.get('/health', async (_req, res) => {
   try {
@@ -61,6 +65,7 @@ api.use(collabRouter);
 api.use(approvalsRouter);
 api.use(rolesRouter);
 api.use(orgRouter);
+api.use(uploadRouter);
 app.use('/api/crm', api);
 
 // 404

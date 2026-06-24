@@ -100,6 +100,20 @@ export interface Contact {
   sourceLeadsId?: number;
 }
 
+export interface Attachment {
+  name: string;
+  url: string;
+  mime: string;
+  size: number;
+}
+export interface TrackingInput {
+  comment: string;
+  trackingType?: number;
+  nextTrackingDate?: string;
+  priorityLevel?: number;
+  attachments?: Attachment[];
+}
+
 /** customer_tracking 跟进记录 */
 export interface Tracking {
   trackingId: number;
@@ -111,6 +125,7 @@ export interface Tracking {
   nextTrackingDate?: string;
   priorityLevel?: 1 | 2; // 有效/无效跟进
   ding?: number[]; // 提醒人
+  attachments?: Attachment[];
   createBy: number;
   createDate: string;
 }

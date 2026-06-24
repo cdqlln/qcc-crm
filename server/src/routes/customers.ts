@@ -113,10 +113,11 @@ customersRouter.post(
     const trackingType = req.body?.trackingType ? Number(req.body.trackingType) : null;
     const nextDate = req.body?.nextTrackingDate || null;
     const priority = req.body?.priorityLevel ? Number(req.body.priorityLevel) : 1;
+    const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
     const row = await one(
-      `INSERT INTO customer_tracking (organization_id, customer_id, business_type, tracking_type_term, comment, next_tracking_at, priority_level, created_by)
-       VALUES ($1,$2,1,$3,$4,$5,$6,$7) RETURNING *`,
-      [orgId, cid, trackingType, comment, nextDate, priority, userId],
+      `INSERT INTO customer_tracking (organization_id, customer_id, business_type, tracking_type_term, comment, next_tracking_at, priority_level, attachments, created_by)
+       VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [orgId, cid, trackingType, comment, nextDate, priority, JSON.stringify(attachments), userId],
     );
     await one(`UPDATE customer SET tracking_num = tracking_num + 1, tracking_update_at = now(), next_tracking_at=$2 WHERE customer_id=$1`, [cid, nextDate]);
     // 有下次跟进时间 → 生成跟进计划待办（business_type=10）

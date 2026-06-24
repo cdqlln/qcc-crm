@@ -96,7 +96,7 @@ export const customersApi = {
   trackings: (customerId: number) => get<Tracking[]>(`/customers/${customerId}/trackings`),
   activities: (customerId: number) =>
     get<{ kind: string; title: string; summary: string; operator?: string; date: string }[]>(`/customers/${customerId}/activities`),
-  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number }) =>
+  createTracking: (customerId: number, input: import('@/types').TrackingInput) =>
     post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
   lastQuotePrices: (customerId: number) =>
@@ -164,6 +164,22 @@ export const aiApi = {
 export const searchApi = {
   query: (kw: string) => get<SearchHit[]>(`/search?kw=${encodeURIComponent(kw)}`),
 };
+
+// 附件上传（multipart；不手动设 Content-Type，由浏览器带 boundary）
+export const uploadApi = {
+  upload: async (files: File[]): Promise<import('@/types').Attachment[]> => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append('files', f));
+    const res = await fetch(`${BASE}/api/crm/upload`, { method: 'POST', headers: { ...authHeaders() }, body: fd });
+    if (res.status === 401) { authStore.clearAndRedirect(); throw new Error('未登录'); }
+    const body = (await res.json()) as { code: number; msg: string; data: import('@/types').Attachment[] };
+    if (body.code !== 0) throw new Error(body.msg || '上传失败');
+    return body.data;
+  },
+};
+
+// 把后端相对地址(/uploads/..)拼成可访问 URL
+export const assetUrl = (url: string) => (/^(https?:|data:|blob:)/.test(url) ? url : `${BASE}${url}`);
 
 // ---- 协同模块 ----
 import type { ApprovalRoute, ApprovalTask, QywxMessage, Sign, Ticket, TicketComment } from '@/types';
