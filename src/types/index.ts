@@ -100,6 +100,8 @@ export interface Contact {
   type: 1 | 2; // 1主 2普通
   maintainerId?: number;
   sourceLeadsId?: number;
+  remark?: string;
+  wecomExternalUserid?: string;
 }
 
 export interface Attachment {

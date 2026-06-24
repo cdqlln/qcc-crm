@@ -8,8 +8,10 @@ import {
   FilePlus2,
   MapPin,
   Network,
+  Pencil,
   PlusCircle,
   ShieldAlert,
+  Trash2,
   UserCog,
 } from 'lucide-react';
 import { contracts, customersApi, groupsApi, opportunities, quotations } from '@/api/crm';
@@ -33,7 +35,7 @@ import { useCreate } from '@/store/create';
 import { useTerm } from '@/hooks/useTerms';
 import { userName } from '@/mock/org';
 import { formatDate } from '@/lib/format';
-import type { Contract, Customer, Opportunity, Quotation } from '@/types';
+import type { Contact, Contract, Customer, Opportunity, Quotation } from '@/types';
 
 export function CustomerDetailPage() {
   const { id } = useParams();
@@ -142,25 +144,7 @@ export function CustomerDetailPage() {
             </div>
           )}
 
-          {tab === 'contacts' && (
-            <div className="grid grid-cols-2 gap-3">
-              {contactList.map((c) => (
-                <div key={c.contactId} className="rounded-lg border border-border p-3">
-                  <div className="flex items-center gap-2">
-                    <Avatar name={c.name} size={28} />
-                    <span className="font-medium text-text">{c.name}</span>
-                    {c.type === 1 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-xs text-primary">主</span>}
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-y-1.5 text-sm text-text-weak">
-                    <span>{c.position}</span>
-                    <span>{c.department}</span>
-                    <span>{c.phone}</span>
-                    <span>微信 {c.wechat}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {tab === 'contacts' && <ContactsTab customerId={cid} />}
 
           {tab === 'tracking' && (
             trackList.length === 0 ? <EmptyState title="暂无跟进记录" /> : (
@@ -262,6 +246,84 @@ function ActivityTab({ customerId }: { customerId: number }) {
         body: a.summary,
       }))}
     />
+  );
+}
+
+// 联系人：电话/邮箱/岗位/部门/微信/备注 + 企业微信关联，支持增删改
+function ContactsTab({ customerId }: { customerId: number }) {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const [edit, setEdit] = useState<Contact | null | undefined>(undefined); // undefined=关闭 null=新增
+  const { data: list = [], isLoading } = useQuery({ queryKey: ['contacts', customerId], queryFn: () => customersApi.contacts(customerId) });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['contacts', customerId] });
+  const del = async (id: number) => { await customersApi.removeContact(id); refresh(); toast('已删除联系人', 'info'); };
+
+  if (isLoading) return <TableSkeleton rows={3} cols={2} />;
+  return (
+    <div>
+      <div className="mb-3 flex justify-end"><Button size="sm" variant="primary" onClick={() => setEdit(null)}><PlusCircle size={13} />新增联系人</Button></div>
+      {list.length === 0 ? <EmptyState title="暂无联系人" /> : (
+        <div className="grid grid-cols-2 gap-3">
+          {list.map((c) => (
+            <div key={c.contactId} className="group rounded-lg border border-border p-3">
+              <div className="flex items-center gap-2">
+                <Avatar name={c.name} size={28} />
+                <span className="font-medium text-text">{c.name}</span>
+                {c.type === 1 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-xs text-primary">主</span>}
+                {c.wecomExternalUserid && <StatusTag kind="success" label="企微已关联" dot={false} />}
+                <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => setEdit(c)} className="text-text-faint hover:text-primary"><Pencil size={13} /></button>
+                  <button onClick={() => del(c.contactId)} className="text-text-faint hover:text-danger"><Trash2 size={13} /></button>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-y-1.5 text-sm text-text-weak">
+                <span>岗位：{c.position || '—'}</span>
+                <span>部门：{c.department || '—'}</span>
+                <span>电话：{c.phone || '—'}</span>
+                <span>邮箱：{c.email || '—'}</span>
+                <span>微信：{c.wechat || '—'}</span>
+                <span>企微：{c.wecomExternalUserid || '未关联'}</span>
+              </div>
+              {c.remark && <div className="mt-1.5 rounded bg-bg px-2 py-1 text-xs text-text-weak">备注：{c.remark}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {edit !== undefined && <ContactDialog customerId={customerId} contact={edit} onClose={() => setEdit(undefined)} onDone={() => { refresh(); setEdit(undefined); }} />}
+    </div>
+  );
+}
+
+function ContactDialog({ customerId, contact, onClose, onDone }: { customerId: number; contact: Contact | null; onClose: () => void; onDone: () => void }) {
+  const toast = useUI((s) => s.toast);
+  const [f, setF] = useState({
+    name: contact?.name ?? '', phone: contact?.phone ?? '', email: contact?.email ?? '', wechat: contact?.wechat ?? '',
+    position: contact?.position ?? '', department: contact?.department ?? '', remark: contact?.remark ?? '',
+    type: contact?.type ?? 2, wecomExternalUserid: contact?.wecomExternalUserid ?? '',
+  });
+  const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
+  const save = async () => {
+    if (!f.name.trim()) return toast('请填写姓名', 'error');
+    const payload = { ...f, type: Number(f.type) as 1 | 2 };
+    if (contact) await customersApi.updateContact(contact.contactId, payload);
+    else await customersApi.createContact(customerId, payload);
+    toast('已保存联系人', 'success'); onDone();
+  };
+  return (
+    <Dialog open onClose={onClose} title={contact ? '编辑联系人' : '新增联系人'} width="w-[520px]"
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={save}>保存</Button></>}>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="姓名" required><TextInput value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
+        <Field label="类型"><Select value={f.type} onChange={(e) => set('type', Number(e.target.value))}><option value={1}>主联系人</option><option value={2}>普通</option></Select></Field>
+        <Field label="岗位"><TextInput value={f.position} onChange={(e) => set('position', e.target.value)} /></Field>
+        <Field label="部门"><TextInput value={f.department} onChange={(e) => set('department', e.target.value)} /></Field>
+        <Field label="电话"><TextInput value={f.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
+        <Field label="邮箱"><TextInput value={f.email} onChange={(e) => set('email', e.target.value)} /></Field>
+        <Field label="微信号"><TextInput value={f.wechat} onChange={(e) => set('wechat', e.target.value)} /></Field>
+        <Field label="企业微信外部ID" hint="关联后可在企微侧边栏沟通"><TextInput value={f.wecomExternalUserid} onChange={(e) => set('wecomExternalUserid', e.target.value)} placeholder="wmExternalUserId" /></Field>
+        <Field label="备注" className="col-span-2"><TextArea value={f.remark} onChange={(e) => set('remark', e.target.value)} /></Field>
+      </div>
+    </Dialog>
   );
 }
 

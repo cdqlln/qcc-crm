@@ -148,6 +148,25 @@ export const customersApi = {
   },
   get: (id: number) => delay(customers.find((c) => c.customerId === id)),
   contacts: (customerId: number) => delay(contacts.filter((c) => c.customerId === customerId)),
+  createContact: (customerId: number, input: any) => {
+    if (input.type === 1) contacts.forEach((c) => { if (c.customerId === customerId && c.type === 1) c.type = 2; });
+    const row: any = { contactId: nextId(contacts, 'contactId'), customerId, type: 2, ...input };
+    contacts.push(row);
+    return delay(row);
+  },
+  updateContact: (contactId: number, input: any) => {
+    const c = contacts.find((x) => x.contactId === contactId) as any;
+    if (c) {
+      if (input.type === 1) contacts.forEach((x) => { if (x.customerId === c.customerId && x.type === 1 && x.contactId !== contactId) x.type = 2; });
+      Object.assign(c, input);
+    }
+    return delay(c);
+  },
+  removeContact: (contactId: number) => {
+    const i = contacts.findIndex((x) => x.contactId === contactId);
+    if (i >= 0) contacts.splice(i, 1);
+    return delay({ ok: true });
+  },
   trackings: (customerId: number) =>
     delay(
       trackings

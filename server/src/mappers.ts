@@ -50,6 +50,8 @@ export const mapContact = (r: any) => ({
   type: r.type,
   maintainerId: r.maintainer_id,
   sourceLeadsId: r.source_leads_id,
+  remark: r.remark,
+  wecomExternalUserid: r.wecom_external_userid,
 });
 
 export const mapTracking = (r: any) => ({

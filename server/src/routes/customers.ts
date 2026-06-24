@@ -72,6 +72,51 @@ customersRouter.get(
   }),
 );
 
+const contactSchema = z.object({
+  name: z.string().min(1),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  wechat: z.string().optional(),
+  position: z.string().optional(),
+  department: z.string().optional(),
+  remark: z.string().optional(),
+  type: z.coerce.number().int().min(1).max(2).default(2),
+  wecomExternalUserid: z.string().optional(),
+});
+
+// 新增联系人
+customersRouter.post('/customers/:id/contacts', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const d = contactSchema.parse(req.body);
+  const cid = Number(req.params.id);
+  if (d.type === 1) await one(`UPDATE contact SET type=2 WHERE customer_id=$1 AND type=1`, [cid]); // 主联系人唯一
+  const row = await one(
+    `INSERT INTO contact (organization_id, customer_id, name, phone, email, wechat, position, department, remark, type, wecom_external_userid)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [orgId, cid, d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null],
+  );
+  ok(res, mapContact(row));
+}));
+
+// 编辑联系人
+customersRouter.put('/contacts/:id', ah(async (req, res) => {
+  const d = contactSchema.parse(req.body);
+  const cur = await one<any>(`SELECT customer_id FROM contact WHERE contact_id=$1`, [req.params.id]);
+  if (!cur) return fail(res, '联系人不存在', 1, 404);
+  if (d.type === 1) await one(`UPDATE contact SET type=2 WHERE customer_id=$1 AND type=1 AND contact_id<>$2`, [cur.customer_id, req.params.id]);
+  const row = await one(
+    `UPDATE contact SET name=$1, phone=$2, email=$3, wechat=$4, position=$5, department=$6, remark=$7, type=$8, wecom_external_userid=$9
+     WHERE contact_id=$10 RETURNING *`,
+    [d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null, req.params.id],
+  );
+  ok(res, mapContact(row));
+}));
+
+customersRouter.delete('/contacts/:id', ah(async (req, res) => {
+  await one(`DELETE FROM contact WHERE contact_id=$1`, [req.params.id]);
+  ok(res, { ok: true });
+}));
+
 customersRouter.get(
   '/customers/:id/trackings',
   ah(async (req, res) => {

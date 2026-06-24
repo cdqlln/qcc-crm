@@ -93,6 +93,9 @@ export const customersApi = {
   list: (p: ListParams) => list<Customer>('/customers/list', p),
   get: (id: number) => get<Customer>(`/customers/${id}`),
   contacts: (customerId: number) => get<Contact[]>(`/customers/${customerId}/contacts`),
+  createContact: (customerId: number, input: Partial<Contact>) => post<Contact>(`/customers/${customerId}/contacts`, input),
+  updateContact: (contactId: number, input: Partial<Contact>) => put<Contact>(`/contacts/${contactId}`, input),
+  removeContact: (contactId: number) => req(`/contacts/${contactId}`, { method: 'DELETE' }),
   trackings: (customerId: number) => get<Tracking[]>(`/customers/${customerId}/trackings`),
   activities: (customerId: number) =>
     get<{ kind: string; title: string; summary: string; operator?: string; date: string }[]>(`/customers/${customerId}/activities`),
