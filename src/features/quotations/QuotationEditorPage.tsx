@@ -12,8 +12,9 @@ import { useUI } from '@/store/ui';
 import { add, mul, rate, sub, d } from '@/lib/money';
 import { cn } from '@/lib/cn';
 import { PRODUCT_KIND, QUOTE_TYPE, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
+import { CustomerSearchSelect } from '@/components/ui/CustomerSearchSelect';
 import { printQuotation } from './printQuotation';
-import type { Customer, Product, ProductTier } from '@/types';
+import type { Product, ProductTier } from '@/types';
 
 interface Line {
   id: number;
@@ -45,8 +46,6 @@ export function QuotationEditorPage() {
   const { data: existing } = useQuery({ queryKey: ['quotation', id], queryFn: () => quotationsApi.get(Number(id)), enabled: !isNew });
   const { data: existingLines = [] } = useQuery({ queryKey: ['quotation-products', id], queryFn: () => quotationsApi.products(Number(id)), enabled: !isNew });
   // 新建时选择客户
-  const { data: custPage } = useQuery({ queryKey: ['customers-pick'], queryFn: () => customersApi.list({ page: 1, pageSize: 200, tab: 'all' }), enabled: isNew });
-  const { data: oppPage } = useQuery({ queryKey: ['opps-pick'], queryFn: () => opportunitiesApi.list({ page: 1, pageSize: 300 }) });
 
   const [lines, setLines] = useState<Line[]>([]);
   const [orderDiscount, setOrderDiscount] = useState('1.00');
@@ -72,6 +71,12 @@ export function QuotationEditorPage() {
     enabled: !!effCustomerId,
   });
   const levelCap = policy.find((p) => p.levelTermId === customer?.level)?.maxDiscount ?? '0.95';
+  // 仅该客户名下的商机（服务端按数据范围过滤）
+  const { data: oppPage } = useQuery({
+    queryKey: ['opps-by-cust', effCustomerId],
+    queryFn: () => opportunitiesApi.list({ page: 1, pageSize: 100, filters: { customerId: effCustomerId } }),
+    enabled: !!effCustomerId,
+  });
 
   // 价格保护：该客户历史报价单价（同产品）
   const { data: lastPrices = [] } = useQuery({
@@ -265,10 +270,11 @@ export function QuotationEditorPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-text">客户</label>
                 {isNew ? (
-                  <Select value={customerId ?? ''} onChange={(e) => { setCustomerId(Number(e.target.value) || undefined); setOpportunityId(undefined); }} className="w-56" invalid={!customerId}>
-                    <option value="">请选择客户</option>
-                    {(custPage?.list ?? []).map((c: Customer) => <option key={c.customerId} value={c.customerId}>{c.name}</option>)}
-                  </Select>
+                  <CustomerSearchSelect
+                    value={customerId}
+                    valueName={customer?.name}
+                    onChange={(id) => { setCustomerId(id); setOpportunityId(undefined); }}
+                  />
                 ) : (
                   <span className="flex h-9 items-center text-sm text-text">{existing?.customerName ?? '—'}</span>
                 )}
@@ -278,15 +284,11 @@ export function QuotationEditorPage() {
                 <Select
                   value={opportunityId ?? ''}
                   className="w-56"
-                  onChange={(e) => {
-                    const oid = Number(e.target.value) || undefined;
-                    setOpportunityId(oid);
-                    const opp = (oppPage?.list ?? []).find((o) => o.opportunityId === oid);
-                    if (opp) setCustomerId(opp.customerId); // 关联商机自动带出客户
-                  }}
+                  disabled={!effCustomerId}
+                  onChange={(e) => setOpportunityId(Number(e.target.value) || undefined)}
                 >
-                  <option value="">不关联</option>
-                  {(oppPage?.list ?? []).filter((o) => !customerId || o.customerId === customerId).map((o) => (
+                  <option value="">{effCustomerId ? '不关联' : '请先选客户'}</option>
+                  {(oppPage?.list ?? []).map((o) => (
                     <option key={o.opportunityId} value={o.opportunityId}>{o.code} · {o.name}</option>
                   ))}
                 </Select>
