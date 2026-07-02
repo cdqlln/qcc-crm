@@ -4,6 +4,7 @@ import { one, query, tx } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList } from '../list.js';
 import { mapQuotation, mapQuotationProduct } from '../mappers.js';
+import { dataScopeCond } from '../auth.js';
 
 export const quotationsRouter = Router();
 
@@ -53,9 +54,20 @@ const saveSchema = z.object({
   currency: z.string().default('CNY'),
   orderDiscountRate: z.string().default('1.0000'),
   otherCharges: z.string().default('0'),
+  otherChargesItems: z.array(z.object({ name: z.string().default(''), amount: z.coerce.number().default(0) })).default([]),
   discount: z.string().default('0'),
+  quoteDate: z.string().optional(),
+  expiredDate: z.string().optional(),
+  contractTerm: z.coerce.number().int().optional(),
   lines: z.array(lineSchema).default([]),
 });
+
+// 其他费用合计：有明细则取明细之和，否则用传入的合计
+function otherChargesSum(d: { otherChargesItems?: { amount: number }[]; otherCharges: string }): string {
+  if (d.otherChargesItems && d.otherChargesItems.length)
+    return d.otherChargesItems.reduce((s, i) => s + Number(i.amount || 0), 0).toFixed(2);
+  return d.otherCharges;
+}
 
 async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
@@ -83,14 +95,21 @@ quotationsRouter.post(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
+    // 数据范围校验：销售只能为自归属（可见范围内）的客户建报价
+    const scope = await dataScopeCond(req, 'leader_id');
+    const own = await one(`SELECT 1 FROM customer WHERE customer_id=$1 AND organization_id=$2 ${scope ? 'AND ' + scope : ''}`, [d.customerId, orgId]);
+    if (!own) return fail(res, '无权为该客户建报价（非你归属的客户）', 1, 403);
     const seq = await one<{ n: number }>(`SELECT count(*)+1 AS n FROM quotation WHERE organization_id=$1`, [orgId]);
     const code = `QT${new Date().getFullYear()}${String(seq!.n).padStart(4, '0')}`;
+    const oc = otherChargesSum(d);
     const id = await tx(async (c) => {
       const q = (await c.query(
         `INSERT INTO quotation (organization_id, code, version, name, customer_id, contact_id, opportunity_id,
-           quote_type, currency, status, order_discount_rate, other_charges, discount, approval)
-         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,-1) RETURNING quotation_id`,
-        [orgId, code, d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency, d.orderDiscountRate, d.otherCharges, d.discount],
+           quote_type, currency, status, order_discount_rate, other_charges, other_charges_items, discount,
+           quote_date, expired_date, contract_term, approval)
+         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12,$13,$14,$15,-1) RETURNING quotation_id`,
+        [orgId, code, d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency,
+         d.orderDiscountRate, oc, JSON.stringify(d.otherChargesItems ?? []), d.discount, d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null],
       )).rows[0];
       await writeLines(c, q.quotation_id, d.lines);
       return q.quotation_id;
@@ -113,8 +132,10 @@ quotationsRouter.put(
     await tx(async (c) => {
       await c.query(
         `UPDATE quotation SET name=$1, customer_id=$2, contact_id=$3, opportunity_id=$4, quote_type=$5,
-           currency=$6, order_discount_rate=$7, other_charges=$8, discount=$9 WHERE quotation_id=$10`,
-        [d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency, d.orderDiscountRate, d.otherCharges, d.discount, req.params.id],
+           currency=$6, order_discount_rate=$7, other_charges=$8, discount=$9,
+           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14 WHERE quotation_id=$10`,
+        [d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency, d.orderDiscountRate, otherChargesSum(d), d.discount, req.params.id,
+         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? [])],
       );
       await writeLines(c, Number(req.params.id), d.lines);
     });

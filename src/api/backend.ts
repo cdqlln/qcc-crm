@@ -93,6 +93,9 @@ export const customersApi = {
   list: (p: ListParams) => list<Customer>('/customers/list', p),
   get: (id: number) => get<Customer>(`/customers/${id}`),
   contacts: (customerId: number) => get<Contact[]>(`/customers/${customerId}/contacts`),
+  createContact: (customerId: number, input: Partial<Contact>) => post<Contact>(`/customers/${customerId}/contacts`, input),
+  updateContact: (contactId: number, input: Partial<Contact>) => put<Contact>(`/contacts/${contactId}`, input),
+  removeContact: (contactId: number) => req(`/contacts/${contactId}`, { method: 'DELETE' }),
   trackings: (customerId: number) => get<Tracking[]>(`/customers/${customerId}/trackings`),
   activities: (customerId: number) =>
     get<{ kind: string; title: string; summary: string; operator?: string; date: string }[]>(`/customers/${customerId}/activities`),
@@ -216,7 +219,18 @@ export const qywxApi = {
   send: (toUserId: number | null, content: string) => post('/qywx/send', { toUserId, content }),
 };
 
-import type { DeptMember, DeptNode, OrgInfo, PermissionItem, Role, UserRoles } from '@/types';
+import type { AuditLog, BizType, DeptMember, DeptNode, DictItem, OrgInfo, PermissionItem, Role, UserRoles } from '@/types';
+
+export const dictApi = {
+  bizTypes: () => get<BizType[]>('/dict/biz-types'),
+  list: (businessType: number) => get<DictItem[]>(`/dict?businessType=${businessType}`),
+  create: (input: { businessType: number; name: string; kind?: string; order?: number }) => post<{ termId: number }>('/dict', input),
+  update: (id: number, input: { name?: string; kind?: string; order?: number; active?: number }) => put(`/dict/${id}`, input),
+  remove: (id: number) => req(`/dict/${id}`, { method: 'DELETE' }),
+};
+export const auditApi = {
+  list: (p: ListParams) => list<AuditLog>('/audit-logs', p),
+};
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),
   updateInfo: (name: string) => put('/org', { name }),
@@ -226,6 +240,17 @@ export const orgApi = {
   removeDept: (id: number) => req(`/departments/${id}`, { method: 'DELETE' }),
   members: (id: number) => get<DeptMember[]>(`/departments/${id}/members`),
   moveUser: (userId: number, departmentId: number) => put(`/users/${userId}/department`, { departmentId }),
+};
+
+import type { CustomerGroup } from '@/types';
+export const groupsApi = {
+  list: () => get<CustomerGroup[]>('/customer-groups'),
+  create: (input: { name: string; matchKey?: string; refCompanyId?: string }) => post<{ groupId: number; attached: number }>('/customer-groups', input),
+  update: (id: number, input: { name: string; matchKey?: string }) => put(`/customer-groups/${id}`, input),
+  remove: (id: number) => req(`/customer-groups/${id}`, { method: 'DELETE' }),
+  members: (id: number) => get<Customer[]>(`/customer-groups/${id}/members`),
+  setCustomerGroup: (customerId: number, groupId: number | null) => put(`/customers/${customerId}/group`, { groupId }),
+  autoRegroup: () => post<{ scanned: number; grouped: number }>('/customer-groups/auto-regroup'),
 };
 
 export const rolesApi = {

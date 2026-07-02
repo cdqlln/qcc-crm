@@ -81,6 +81,8 @@ export interface Customer {
   utmMedium?: string;
   utmCampaign?: string;
   opportunityCount?: number;
+  groupId?: number | null;
+  groupName?: string;
   approval: ApprovalStatus;
   active: -1 | 0 | 1 | 2;
   createDate?: string;
@@ -98,6 +100,8 @@ export interface Contact {
   type: 1 | 2; // 1主 2普通
   maintainerId?: number;
   sourceLeadsId?: number;
+  remark?: string;
+  wecomExternalUserid?: string;
 }
 
 export interface Attachment {
@@ -176,6 +180,7 @@ export interface Quotation {
   bidderId?: number;
   quoteDate?: string;
   expiredDate?: string;
+  contractTerm?: number; // 合同限期（月）
   currency: string;
   status: 0 | 1 | 2 | 3; // 0初始 1报价中 2失效 3已生成合同
   quoteType?: 1 | 2 | 3 | 4; // 1询价 2报价 3标书 4框架协议
@@ -183,6 +188,7 @@ export interface Quotation {
   comDiscountRate: string;
   orderDiscountRate: string;
   otherCharges: string;
+  otherChargesItems?: { name: string; amount: number }[];
   discount: string;
   amount: string;
   cost: string;
@@ -460,6 +466,40 @@ export interface QywxMessage {
   businessId?: number;
   content: string;
   channel: string;
+  status: number;
+  createDate: string;
+}
+
+// ---- 集团客户 ----
+export interface CustomerGroup {
+  groupId: number;
+  name: string;
+  matchKey?: string;
+  refCompanyId?: string;
+  memberCount: number;
+}
+
+// ---- 字典配置 / 审计 ----
+export interface BizType { businessType: number; label: string }
+export interface DictItem {
+  termId: number;
+  businessType: number;
+  name: string;
+  kind?: string;
+  order?: number;
+  active: number;
+  systemLevel: boolean;
+}
+export interface AuditLog {
+  auditId: number;
+  userId?: number;
+  userName?: string;
+  action: string;
+  method: string;
+  path: string;
+  targetId?: string;
+  detail?: string;
+  ip?: string;
   status: number;
   createDate: string;
 }

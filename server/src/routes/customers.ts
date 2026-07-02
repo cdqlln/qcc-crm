@@ -5,6 +5,7 @@ import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapContact, mapCustomer, mapTracking } from '../mappers.js';
 import { createApprovalTask } from './approvals.js';
+import { autoAttachGroup } from './groups.js';
 import { dataScopeCond } from '../auth.js';
 
 export const customersRouter = Router();
@@ -53,7 +54,11 @@ customersRouter.get(
   '/customers/:id',
   ah(async (req, res) => {
     const { orgId } = ctx(req);
-    const row = await one(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+    const row = await one(
+      `SELECT c.*, g.name AS group_name FROM customer c LEFT JOIN customer_group g ON g.group_id=c.group_id
+       WHERE c.customer_id=$1 AND c.organization_id=$2`,
+      [req.params.id, orgId],
+    );
     if (!row) return fail(res, '客户不存在', 1, 404);
     ok(res, mapCustomer(row));
   }),
@@ -66,6 +71,51 @@ customersRouter.get(
     ok(res, rows.map(mapContact));
   }),
 );
+
+const contactSchema = z.object({
+  name: z.string().min(1),
+  phone: z.string().optional(),
+  email: z.string().optional(),
+  wechat: z.string().optional(),
+  position: z.string().optional(),
+  department: z.string().optional(),
+  remark: z.string().optional(),
+  type: z.coerce.number().int().min(1).max(2).default(2),
+  wecomExternalUserid: z.string().optional(),
+});
+
+// 新增联系人
+customersRouter.post('/customers/:id/contacts', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const d = contactSchema.parse(req.body);
+  const cid = Number(req.params.id);
+  if (d.type === 1) await one(`UPDATE contact SET type=2 WHERE customer_id=$1 AND type=1`, [cid]); // 主联系人唯一
+  const row = await one(
+    `INSERT INTO contact (organization_id, customer_id, name, phone, email, wechat, position, department, remark, type, wecom_external_userid)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [orgId, cid, d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null],
+  );
+  ok(res, mapContact(row));
+}));
+
+// 编辑联系人
+customersRouter.put('/contacts/:id', ah(async (req, res) => {
+  const d = contactSchema.parse(req.body);
+  const cur = await one<any>(`SELECT customer_id FROM contact WHERE contact_id=$1`, [req.params.id]);
+  if (!cur) return fail(res, '联系人不存在', 1, 404);
+  if (d.type === 1) await one(`UPDATE contact SET type=2 WHERE customer_id=$1 AND type=1 AND contact_id<>$2`, [cur.customer_id, req.params.id]);
+  const row = await one(
+    `UPDATE contact SET name=$1, phone=$2, email=$3, wechat=$4, position=$5, department=$6, remark=$7, type=$8, wecom_external_userid=$9
+     WHERE contact_id=$10 RETURNING *`,
+    [d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null, req.params.id],
+  );
+  ok(res, mapContact(row));
+}));
+
+customersRouter.delete('/contacts/:id', ah(async (req, res) => {
+  await one(`DELETE FROM contact WHERE contact_id=$1`, [req.params.id]);
+  ok(res, { ok: true });
+}));
 
 customersRouter.get(
   '/customers/:id/trackings',
@@ -189,6 +239,7 @@ const createSchema = z.object({
   phoneName: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().optional(),
+  refCompanyId: z.string().optional(),
   leaderId: z.coerce.number().int().positive(),
 });
 
@@ -199,12 +250,14 @@ customersRouter.post(
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
-    const row = await one(
-      `INSERT INTO customer (organization_id, name, category, status_term_id, level_term_id, source_term_id,
+    const row = await one<any>(
+      `INSERT INTO customer (organization_id, name, ref_company_id, category, status_term_id, level_term_id, source_term_id,
          industry, phone_name, phone, email, leader_id, created_by, tracking_update_at)
-       VALUES ($1,$2,3,8,$3,$4,$5,$6,$7,$8,$9,$10, now()) RETURNING *`,
-      [orgId, d.name, d.level, d.source, d.industry ?? null, d.phoneName ?? null, d.phone ?? null, d.email ?? null, d.leaderId, userId],
+       VALUES ($1,$2,$3,3,8,$4,$5,$6,$7,$8,$9,$10,$11, now()) RETURNING *`,
+      [orgId, d.name, d.refCompanyId ?? null, d.level, d.source, d.industry ?? null, d.phoneName ?? null, d.phone ?? null, d.email ?? null, d.leaderId, userId],
     );
-    ok(res, mapCustomer(row));
+    // 按工商关系(企查查集团/实控人)自动归集；多公司同集团时自动归到一起
+    const groupId = await autoAttachGroup(orgId, row.customer_id, d.name, d.refCompanyId);
+    ok(res, mapCustomer({ ...row, group_id: groupId }));
   }),
 );

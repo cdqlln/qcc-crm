@@ -148,6 +148,25 @@ export const customersApi = {
   },
   get: (id: number) => delay(customers.find((c) => c.customerId === id)),
   contacts: (customerId: number) => delay(contacts.filter((c) => c.customerId === customerId)),
+  createContact: (customerId: number, input: any) => {
+    if (input.type === 1) contacts.forEach((c) => { if (c.customerId === customerId && c.type === 1) c.type = 2; });
+    const row: any = { contactId: nextId(contacts, 'contactId'), customerId, type: 2, ...input };
+    contacts.push(row);
+    return delay(row);
+  },
+  updateContact: (contactId: number, input: any) => {
+    const c = contacts.find((x) => x.contactId === contactId) as any;
+    if (c) {
+      if (input.type === 1) contacts.forEach((x) => { if (x.customerId === c.customerId && x.type === 1 && x.contactId !== contactId) x.type = 2; });
+      Object.assign(c, input);
+    }
+    return delay(c);
+  },
+  removeContact: (contactId: number) => {
+    const i = contacts.findIndex((x) => x.contactId === contactId);
+    if (i >= 0) contacts.splice(i, 1);
+    return delay({ ok: true });
+  },
   trackings: (customerId: number) =>
     delay(
       trackings
@@ -282,8 +301,9 @@ export const quotationsApi = {
     const row: any = {
       quotationId: id, code: `QT${new Date().getFullYear()}${String(id).padStart(4, '0')}`, version: 1,
       name: input.name, customerId: input.customerId, customerName: cust?.name, opportunityId: input.opportunityId,
+      quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm,
       currency: input.currency ?? 'CNY', status: 0, quoteType: input.quoteType ?? 2,
-      total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0',
+      total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0', otherChargesItems: input.otherChargesItems ?? [],
       discount: input.discount ?? '0', amount: amount.toFixed(2), cost: cost.toFixed(2),
       grossProfit: (amount - cost).toFixed(2), grossProfitRate: amount > 0 ? (((amount - cost) / amount) * 100).toFixed(1) : '0',
       comDiscountRate: total > 0 ? ((amount / total) * 100).toFixed(1) : '0', approval: -1, customerConfirmed: false,
@@ -293,7 +313,7 @@ export const quotationsApi = {
   },
   update: (id: number, input: any) => {
     const q = quotations.find((x) => x.quotationId === id) as any;
-    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, discount: input.discount });
+    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm });
     return delay(q);
   },
   confirm: (id: number) => {

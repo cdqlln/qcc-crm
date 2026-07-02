@@ -13,6 +13,7 @@ export const customerSchema = z.object({
     .optional()
     .refine((v) => !v || /^1[3-9]\d{9}$/.test(v), '手机号格式不正确'),
   email: z.string().optional().refine((v) => !v || /.+@.+\..+/.test(v), '邮箱格式不正确'),
+  refCompanyId: z.string().optional(),
   leaderId: z.coerce.number().int().positive('请指定负责人'),
 });
 

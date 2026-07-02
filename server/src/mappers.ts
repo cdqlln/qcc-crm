@@ -26,6 +26,8 @@ export const mapCustomer = (r: any) => ({
   preLeaderId: r.pre_leader_id,
   loseTime: r.lose_time,
   opportunityCount: r.opportunity_count,
+  groupId: r.group_id,
+  groupName: r.group_name,
   claimAt: r.claim_at,
   assignAt: r.assign_at,
   utmSource: r.utm_source,
@@ -48,6 +50,8 @@ export const mapContact = (r: any) => ({
   type: r.type,
   maintainerId: r.maintainer_id,
   sourceLeadsId: r.source_leads_id,
+  remark: r.remark,
+  wecomExternalUserid: r.wecom_external_userid,
 });
 
 export const mapTracking = (r: any) => ({
@@ -102,6 +106,7 @@ export const mapQuotation = (r: any) => ({
   bidderId: r.bidder_id,
   quoteDate: r.quote_date,
   expiredDate: r.expired_date,
+  contractTerm: r.contract_term,
   currency: r.currency,
   status: r.status,
   quoteType: r.quote_type,
@@ -109,6 +114,7 @@ export const mapQuotation = (r: any) => ({
   comDiscountRate: r.com_discount_rate,
   orderDiscountRate: r.order_discount_rate,
   otherCharges: r.other_charges,
+  otherChargesItems: r.other_charges_items ?? [],
   discount: r.discount,
   amount: r.amount,
   cost: r.cost,

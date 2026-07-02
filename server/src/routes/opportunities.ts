@@ -14,6 +14,7 @@ const SELECT = 'o.*, c.name AS customer_name';
 const FILTERS: Record<string, FilterDef> = {
   status: { col: 'o.status_term_id', kind: 'in' },
   leaderId: { col: 'o.leader_id', kind: 'eq' },
+  customerId: { col: 'o.customer_id', kind: 'eq' },
   estimatedAmount: { col: 'o.estimated_amount', kind: 'numRange' },
   expiryDate: { col: 'o.expiry_date', kind: 'dateRange' },
 };

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, FileCheck2, Languages, ListTree, Percent, Shield, SlidersHorizontal, Tags, Workflow } from 'lucide-react';
+import { Building2, FileCheck2, FileClock, Languages, ListTree, Percent, Shield, Tags, Workflow } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { useTermsMap } from '@/hooks/useTerms';
@@ -13,9 +13,9 @@ import type { DiscountPolicy } from '@/types';
 const ITEMS = [
   { icon: Building2, title: '组织 / 部门', desc: '组织信息 + 部门树 + 成员归属', path: '/settings/org', perm: 'system.org' },
   { icon: Shield, title: '角色 / 权限', desc: 'RBAC 权限点 + 数据范围 + 成员分配', path: '/settings/roles', perm: 'system.role' },
-  { icon: SlidersHorizontal, title: '字段配置', desc: '列表列显隐 / 自定义字段', path: '/settings', perm: 'system.dict' },
+  { icon: Tags, title: '字典配置', desc: '来源/阶段/状态/标签等枚举维护', path: '/settings/dict', perm: 'system.dict' },
+  { icon: FileClock, title: '日志审计', desc: '关键操作留痕与查询', path: '/settings/audit', perm: 'system.audit' },
   { icon: Workflow, title: '审批流', desc: 'work_flow_route / task / form', path: '/settings', perm: 'system.role' },
-  { icon: Tags, title: '字典管理', desc: 'terms 来源/阶段/状态/分类', path: '/settings', perm: 'system.dict' },
   { icon: ListTree, title: '产品目录', desc: 'product / category / 多币种', path: '/settings/products' },
   { icon: FileCheck2, title: '公海 / 线索池规则', desc: 'pool_rule 领取上限/掉保', path: '/settings' },
   { icon: Languages, title: '国际化 / 币种', desc: 'i18next 中英 + currency_setting', path: '/settings' },

@@ -1,22 +1,25 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Activity,
   Building2,
   CalendarPlus,
   FilePlus2,
   MapPin,
+  Network,
+  Pencil,
   PlusCircle,
   ShieldAlert,
+  Trash2,
   UserCog,
 } from 'lucide-react';
-import { contracts, customersApi, opportunities, quotations } from '@/api/crm';
+import { contracts, customersApi, groupsApi, opportunities, quotations } from '@/api/crm';
 import { Tabs } from '@/components/ui/Tabs';
 import { Button, Avatar, UserCell } from '@/components/ui/primitives';
 import { Card, CardHeader } from '@/components/ui/primitives';
 import { Dialog } from '@/components/ui/Dialog';
-import { Field, Select, TextArea } from '@/components/ui/form';
+import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { MOCK_USERS } from '@/mock/org';
 import { Descriptions } from '@/components/ui/Descriptions';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
@@ -32,7 +35,7 @@ import { useCreate } from '@/store/create';
 import { useTerm } from '@/hooks/useTerms';
 import { userName } from '@/mock/org';
 import { formatDate } from '@/lib/format';
-import type { Contract, Opportunity, Quotation } from '@/types';
+import type { Contact, Contract, Customer, Opportunity, Quotation } from '@/types';
 
 export function CustomerDetailPage() {
   const { id } = useParams();
@@ -127,6 +130,7 @@ export function CustomerDetailPage() {
                     <Metric label="跟进次数" value={String(cust.trackingNum)} />
                   </div>
                 </Section>
+                <GroupSection cust={cust} />
               </div>
               <div>
                 <Section title="风险标签">
@@ -140,25 +144,7 @@ export function CustomerDetailPage() {
             </div>
           )}
 
-          {tab === 'contacts' && (
-            <div className="grid grid-cols-2 gap-3">
-              {contactList.map((c) => (
-                <div key={c.contactId} className="rounded-lg border border-border p-3">
-                  <div className="flex items-center gap-2">
-                    <Avatar name={c.name} size={28} />
-                    <span className="font-medium text-text">{c.name}</span>
-                    {c.type === 1 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-xs text-primary">主</span>}
-                  </div>
-                  <div className="mt-2 grid grid-cols-2 gap-y-1.5 text-sm text-text-weak">
-                    <span>{c.position}</span>
-                    <span>{c.department}</span>
-                    <span>{c.phone}</span>
-                    <span>微信 {c.wechat}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {tab === 'contacts' && <ContactsTab customerId={cid} />}
 
           {tab === 'tracking' && (
             trackList.length === 0 ? <EmptyState title="暂无跟进记录" /> : (
@@ -260,6 +246,183 @@ function ActivityTab({ customerId }: { customerId: number }) {
         body: a.summary,
       }))}
     />
+  );
+}
+
+// 联系人：电话/邮箱/岗位/部门/微信/备注 + 企业微信关联，支持增删改
+function ContactsTab({ customerId }: { customerId: number }) {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const [edit, setEdit] = useState<Contact | null | undefined>(undefined); // undefined=关闭 null=新增
+  const { data: list = [], isLoading } = useQuery({ queryKey: ['contacts', customerId], queryFn: () => customersApi.contacts(customerId) });
+  const refresh = () => qc.invalidateQueries({ queryKey: ['contacts', customerId] });
+  const del = async (id: number) => { await customersApi.removeContact(id); refresh(); toast('已删除联系人', 'info'); };
+
+  if (isLoading) return <TableSkeleton rows={3} cols={2} />;
+  return (
+    <div>
+      <div className="mb-3 flex justify-end"><Button size="sm" variant="primary" onClick={() => setEdit(null)}><PlusCircle size={13} />新增联系人</Button></div>
+      {list.length === 0 ? <EmptyState title="暂无联系人" /> : (
+        <div className="grid grid-cols-2 gap-3">
+          {list.map((c) => (
+            <div key={c.contactId} className="group rounded-lg border border-border p-3">
+              <div className="flex items-center gap-2">
+                <Avatar name={c.name} size={28} />
+                <span className="font-medium text-text">{c.name}</span>
+                {c.type === 1 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-xs text-primary">主</span>}
+                {c.wecomExternalUserid && <StatusTag kind="success" label="企微已关联" dot={false} />}
+                <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => setEdit(c)} className="text-text-faint hover:text-primary"><Pencil size={13} /></button>
+                  <button onClick={() => del(c.contactId)} className="text-text-faint hover:text-danger"><Trash2 size={13} /></button>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-y-1.5 text-sm text-text-weak">
+                <span>岗位：{c.position || '—'}</span>
+                <span>部门：{c.department || '—'}</span>
+                <span>电话：{c.phone || '—'}</span>
+                <span>邮箱：{c.email || '—'}</span>
+                <span>微信：{c.wechat || '—'}</span>
+                <span>企微：{c.wecomExternalUserid || '未关联'}</span>
+              </div>
+              {c.remark && <div className="mt-1.5 rounded bg-bg px-2 py-1 text-xs text-text-weak">备注：{c.remark}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {edit !== undefined && <ContactDialog customerId={customerId} contact={edit} onClose={() => setEdit(undefined)} onDone={() => { refresh(); setEdit(undefined); }} />}
+    </div>
+  );
+}
+
+function ContactDialog({ customerId, contact, onClose, onDone }: { customerId: number; contact: Contact | null; onClose: () => void; onDone: () => void }) {
+  const toast = useUI((s) => s.toast);
+  const [f, setF] = useState({
+    name: contact?.name ?? '', phone: contact?.phone ?? '', email: contact?.email ?? '', wechat: contact?.wechat ?? '',
+    position: contact?.position ?? '', department: contact?.department ?? '', remark: contact?.remark ?? '',
+    type: contact?.type ?? 2, wecomExternalUserid: contact?.wecomExternalUserid ?? '',
+  });
+  const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
+  const save = async () => {
+    if (!f.name.trim()) return toast('请填写姓名', 'error');
+    const payload = { ...f, type: Number(f.type) as 1 | 2 };
+    if (contact) await customersApi.updateContact(contact.contactId, payload);
+    else await customersApi.createContact(customerId, payload);
+    toast('已保存联系人', 'success'); onDone();
+  };
+  return (
+    <Dialog open onClose={onClose} title={contact ? '编辑联系人' : '新增联系人'} width="w-[520px]"
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={save}>保存</Button></>}>
+      <div className="grid grid-cols-2 gap-4">
+        <Field label="姓名" required><TextInput value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
+        <Field label="类型"><Select value={f.type} onChange={(e) => set('type', Number(e.target.value))}><option value={1}>主联系人</option><option value={2}>普通</option></Select></Field>
+        <Field label="岗位"><TextInput value={f.position} onChange={(e) => set('position', e.target.value)} /></Field>
+        <Field label="部门"><TextInput value={f.department} onChange={(e) => set('department', e.target.value)} /></Field>
+        <Field label="电话"><TextInput value={f.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
+        <Field label="邮箱"><TextInput value={f.email} onChange={(e) => set('email', e.target.value)} /></Field>
+        <Field label="微信号"><TextInput value={f.wechat} onChange={(e) => set('wechat', e.target.value)} /></Field>
+        <Field label="企业微信外部ID" hint="关联后可在企微侧边栏沟通"><TextInput value={f.wecomExternalUserid} onChange={(e) => set('wecomExternalUserid', e.target.value)} placeholder="wmExternalUserId" /></Field>
+        <Field label="备注" className="col-span-2"><TextArea value={f.remark} onChange={(e) => set('remark', e.target.value)} /></Field>
+      </div>
+    </Dialog>
+  );
+}
+
+// 集团归属：显示所属集团与同集团客户，支持人工调整
+function GroupSection({ cust }: { cust: Customer }) {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const { data: members = [] } = useQuery({
+    queryKey: ['group-members', cust.groupId],
+    queryFn: () => groupsApi.members(cust.groupId!),
+    enabled: !!cust.groupId,
+  });
+  const siblings = members.filter((m) => m.customerId !== cust.customerId);
+  return (
+    <Section title="集团归属">
+      <div className="rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            {cust.groupName ? (
+              <span className="inline-flex items-center gap-1.5 font-medium text-text"><Network size={14} className="text-primary" />{cust.groupName}</span>
+            ) : (
+              <span className="text-text-faint">未归属集团</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <RegroupButton />
+            <Button size="sm" onClick={() => setOpen(true)}><Network size={13} />调整集团</Button>
+          </div>
+        </div>
+        {cust.groupId && (
+          <div className="mt-2 text-sm text-text-weak">
+            同集团客户（{siblings.length}）：
+            {siblings.length === 0 ? <span className="text-text-faint">无</span> : siblings.map((m) => (
+              <button key={m.customerId} onClick={() => navigate(`/customers/${m.customerId}`)} className="mr-2 text-primary hover:underline">{m.name}</button>
+            ))}
+          </div>
+        )}
+      </div>
+      {open && <GroupDialog cust={cust} onClose={() => setOpen(false)} />}
+    </Section>
+  );
+}
+
+// 按工商关系(企查查集团/实控人)全量自动归集
+function RegroupButton() {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try {
+      const r = await groupsApi.autoRegroup();
+      toast(`工商关系归集完成：扫描 ${r.scanned}，归集 ${r.grouped}`, 'success');
+      qc.invalidateQueries();
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '归集失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return <Button size="sm" onClick={run} disabled={busy}><Network size={13} />{busy ? '归集中…' : '工商关系归集'}</Button>;
+}
+
+function GroupDialog({ cust, onClose }: { cust: Customer; onClose: () => void }) {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const { data: groups = [] } = useQuery({ queryKey: ['groups'], queryFn: () => groupsApi.list() });
+  const [groupId, setGroupId] = useState<string>(cust.groupId ? String(cust.groupId) : '');
+  const [newName, setNewName] = useState('');
+  const [matchKey, setMatchKey] = useState('');
+  const refresh = () => { qc.invalidateQueries({ queryKey: ['customer', cust.customerId] }); qc.invalidateQueries({ queryKey: ['groups'] }); qc.invalidateQueries({ queryKey: ['group-members'] }); };
+  const save = async () => {
+    if (newName.trim()) {
+      const r = await groupsApi.create({ name: newName.trim(), matchKey: matchKey.trim() || undefined });
+      await groupsApi.setCustomerGroup(cust.customerId, r.groupId);
+      toast(`已创建集团并归属${r.attached ? `，自动归集 ${r.attached} 个客户` : ''}`, 'success');
+    } else {
+      await groupsApi.setCustomerGroup(cust.customerId, groupId ? Number(groupId) : null);
+      toast(groupId ? '已调整集团归属' : '已移出集团', 'success');
+    }
+    refresh(); onClose();
+  };
+  return (
+    <Dialog open onClose={onClose} title="调整集团归属" width="w-[460px]"
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={save}>保存</Button></>}>
+      <div className="space-y-4">
+        <Field label="归属到现有集团">
+          <Select value={groupId} onChange={(e) => { setGroupId(e.target.value); setNewName(''); }}>
+            <option value="">（不归属 / 移出集团）</option>
+            {groups.map((g) => <option key={g.groupId} value={g.groupId}>{g.name}（{g.memberCount}）</option>)}
+          </Select>
+        </Field>
+        <div className="text-center text-xs text-text-faint">或 新建集团（按字号自动归集同名客户）</div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="集团名称"><TextInput value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="如：星辰云图集团" /></Field>
+          <Field label="字号关键字" hint="客户名含此词自动归属"><TextInput value={matchKey} onChange={(e) => setMatchKey(e.target.value)} placeholder="如：星辰云图" /></Field>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 
