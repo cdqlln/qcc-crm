@@ -131,6 +131,8 @@ export const quotationsApi = {
   create: (input: unknown) => post<Quotation>('/quotations', input),
   update: (id: number, input: unknown) => put<Quotation>(`/quotations/${id}`, input),
   confirm: (id: number) => post<Quotation>(`/quotations/${id}/confirm`),
+  toContract: (id: number, input: { signCustomerId: number; beginDate?: string }) =>
+    post<{ contractId: number; code: string; signCustomerId: number; expiredDate?: string }>(`/quotations/${id}/to-contract`, input),
 };
 
 export const contractsApi = {
@@ -140,6 +142,8 @@ export const contractsApi = {
   paymentSheets: (_contractId: number) => Promise.resolve([] as never[]),
   invoices: (contractId: number) => get<Invoice[]>(`/contracts/${contractId}/invoices`),
   create: (input: Record<string, unknown>) => post<Contract>('/contracts', input),
+  createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) =>
+    post<Invoice>(`/contracts/${contractId}/invoices`, input),
 };
 
 export const paymentsApi = {

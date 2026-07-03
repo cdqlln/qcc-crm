@@ -17,12 +17,15 @@ export function EntitySearchSelect({
   value,
   valueName,
   onChange,
+  onPickGroup,
   placeholder = '输入公司或集团名称…',
   invalid,
 }: {
   value?: number;
   valueName?: string;
   onChange: (id: number | undefined, name?: string) => void;
+  /** 提供后，集团段显示「按集团报价」入口：回传 (groupId, groupName, 主成员customerId, 主成员name) */
+  onPickGroup?: (groupId: number, groupName: string, mainCustomerId: number, mainName: string) => void;
   placeholder?: string;
   invalid?: boolean;
 }) {
@@ -146,6 +149,14 @@ export function EntitySearchSelect({
             <div key={`g${group.groupId}`}>
               <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-text-weak">
                 <Network size={12} className="text-warning" />{group.name}（{members.length} 家成员）
+                {onPickGroup && members.length > 0 && (
+                  <button
+                    onClick={() => { onPickGroup(group.groupId, group.name, members[0].customerId, members[0].name); setPicked(group.name); setOpen(false); }}
+                    className="ml-auto rounded bg-primary-weak px-1.5 py-0.5 text-[11px] text-primary"
+                  >
+                    按集团报价
+                  </button>
+                )}
               </div>
               {members.map((m) => (
                 <Row key={`gm${m.customerId}`} icon={<Building2 size={14} className="text-warning" />} title={m.name}

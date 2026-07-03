@@ -89,6 +89,37 @@ contractsRouter.get(
   }),
 );
 
+// 申请开票：开票抬头可为合同签约主体，或其同集团子公司（形成 签约=子公司A、开票=子公司B）
+contractsRouter.post(
+  '/contracts/:id/invoices',
+  ah(async (req, res) => {
+    const { orgId } = ctx(req);
+    const ct = await one<any>(`SELECT * FROM contract WHERE contract_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+    if (!ct) return fail(res, '合同不存在', 1, 404);
+    const titleId = Number(req.body?.titleCustomerId || ct.customer_id);
+    const amount = String(req.body?.amount ?? '');
+    if (!amount || Number(amount) <= 0) return fail(res, '请填写开票金额');
+    if (Number(amount) > Number(ct.not_invoice_amount)) return fail(res, `开票金额超过未开票额（剩余 ${ct.not_invoice_amount}）`);
+    const title = await one<any>(`SELECT customer_id, group_id FROM customer WHERE customer_id=$1 AND organization_id=$2`, [titleId, orgId]);
+    if (!title) return fail(res, '开票主体不存在');
+    if (titleId !== ct.customer_id) {
+      const signer = await one<any>(`SELECT group_id FROM customer WHERE customer_id=$1`, [ct.customer_id]);
+      if (!signer?.group_id || title.group_id !== signer.group_id) return fail(res, '开票主体须为签约方或其同集团子公司');
+    }
+    const taxRate = 0.06;
+    const noTax = (Number(amount) / (1 + taxRate)).toFixed(2);
+    const seq = await one<{ n: number }>(`SELECT count(*)+1 AS n FROM invoice WHERE organization_id=$1`, [orgId]);
+    const code = `FP${new Date().getFullYear()}${String(seq!.n).padStart(5, '0')}`;
+    const row = await one<any>(
+      `INSERT INTO invoice (organization_id, code, contract_id, customer_id, invoice_type_term, red_blue_flag, amount, tax_amount, status, approval)
+       VALUES ($1,$2,$3,$4,$5,1,$6,$7,1,-1) RETURNING *`,
+      [orgId, code, ct.contract_id, titleId, req.body?.invoiceTypeTerm ?? 130, amount, (Number(amount) - Number(noTax)).toFixed(2)],
+    );
+    const cust = await one<{ name: string }>(`SELECT name FROM customer WHERE customer_id=$1`, [titleId]);
+    ok(res, mapInvoice({ ...row, customer_name: cust?.name }));
+  }),
+);
+
 const createSchema = z.object({
   name: z.string().min(2),
   customerId: z.coerce.number().int().positive(),

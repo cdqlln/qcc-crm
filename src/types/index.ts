@@ -175,6 +175,8 @@ export interface Quotation {
   name: string;
   customerId: number;
   customerName?: string;
+  groupId?: number | null;
+  groupName?: string;
   contactId?: number;
   opportunityId?: number;
   bidderId?: number;
