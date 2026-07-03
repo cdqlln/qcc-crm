@@ -64,7 +64,7 @@ export function CompanyNameInput({
           {!isFetching && data?.enabled && data.list.length === 0 && (
             <div className="px-3 py-2 text-xs text-text-faint">无匹配企业（可直接输入）</div>
           )}
-          {(data?.list ?? []).map((c) => (
+          {(data?.list ?? []).slice(0, 10).map((c) => (
             <button
               key={c.keyNo}
               onClick={() => { onPick(c); setPickedKeyNo(c.keyNo); setOpen(false); }}
