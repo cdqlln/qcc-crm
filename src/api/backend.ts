@@ -102,6 +102,10 @@ export const customersApi = {
   createTracking: (customerId: number, input: import('@/types').TrackingInput) =>
     post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
+  companySearch: (kw: string) =>
+    get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }>(
+      `/company-search?kw=${encodeURIComponent(kw)}`,
+    ),
   lastQuotePrices: (customerId: number) =>
     get<{ productId: number; unitPrice: string; discountRate: string; code: string; quoteDate?: string }[]>(
       `/customers/${customerId}/last-quote-prices`,
