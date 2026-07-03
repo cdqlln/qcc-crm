@@ -1,13 +1,5 @@
 import { one } from '../db.js';
-
-// 企查查工商关系配置（生产）：填 QCC_API_KEY 即走真实接口
-const QCC = {
-  base: process.env.QCC_API_BASE ?? 'https://api.qcc.com',
-  key: process.env.QCC_API_KEY ?? '',
-  get enabled() {
-    return !!this.key;
-  },
-};
+import { belongGroup, getQccCfg } from './qcc.js';
 
 export interface GroupRel {
   extKey: string;       // 集团/实控人外部标识
@@ -22,20 +14,19 @@ function nameToKey(name: string): string {
 
 /**
  * 解析公司的集团关系：
- *  1) 配置了企查查 API → 调实控人/集团接口；
+ *  1) 配置了企查查凭据 → 调 BelongGroup/GetInfo（searchKey 优先信用代码/名称）；
  *  2) 否则查 company_relation 映射表（开发/演示）；
  *  3) 再否则按字号兜底。
  */
-export async function resolveGroup(refCompanyId: string | null | undefined, name: string): Promise<GroupRel> {
-  if (refCompanyId && QCC.enabled) {
-    try {
-      const r = (await fetch(`${QCC.base}/ECIGroupMember/GetList?key=${QCC.key}&keyword=${encodeURIComponent(refCompanyId)}`).then((x) => x.json())) as any;
-      const ext = r?.Result?.GroupId || r?.Result?.HolderKeyNo;
-      const gname = r?.Result?.GroupName || r?.Result?.HolderName;
-      if (ext) return { extKey: String(ext), groupName: gname || `${nameToKey(name)}集团` };
-    } catch {
-      /* 失败则降级 */
-    }
+export async function resolveGroup(orgId: number, refCompanyId: string | null | undefined, name: string): Promise<GroupRel> {
+  const cfg = await getQccCfg(orgId);
+  if (cfg.enabled) {
+    // BelongGroup 支持 统一社会信用代码 或 企业名称
+    const g = await belongGroup(orgId, name);
+    if (g) return { extKey: g.groupKeyNo, groupName: g.groupName };
+    // null=确认无集团：返回独立键，避免把无关公司拼在一起；
+    // undefined=接口出错/风控（如境外IP 121）：继续走下方映射表/字号兜底
+    if (g === null) return { extKey: `SOLO:${refCompanyId ?? name}`, groupName: '' };
   }
   if (refCompanyId) {
     const rel = await one<{ ext_key: string; group_name: string }>(

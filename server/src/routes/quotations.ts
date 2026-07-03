@@ -48,6 +48,7 @@ const lineSchema = z.object({
 const saveSchema = z.object({
   name: z.string().min(1),
   customerId: z.coerce.number().int().positive(),
+  groupId: z.coerce.number().int().optional(),
   contactId: z.coerce.number().int().optional(),
   opportunityId: z.coerce.number().int().optional(),
   quoteType: z.coerce.number().int().min(1).max(4).default(2),
@@ -104,11 +105,11 @@ quotationsRouter.post(
     const oc = otherChargesSum(d);
     const id = await tx(async (c) => {
       const q = (await c.query(
-        `INSERT INTO quotation (organization_id, code, version, name, customer_id, contact_id, opportunity_id,
+        `INSERT INTO quotation (organization_id, code, version, name, customer_id, group_id, contact_id, opportunity_id,
            quote_type, currency, status, order_discount_rate, other_charges, other_charges_items, discount,
            quote_date, expired_date, contract_term, approval)
-         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12,$13,$14,$15,-1) RETURNING quotation_id`,
-        [orgId, code, d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency,
+         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14,$15,$16,-1) RETURNING quotation_id`,
+        [orgId, code, d.name, d.customerId, d.groupId ?? null, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency,
          d.orderDiscountRate, oc, JSON.stringify(d.otherChargesItems ?? []), d.discount, d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null],
       )).rows[0];
       await writeLines(c, q.quotation_id, d.lines);
@@ -133,14 +134,46 @@ quotationsRouter.put(
       await c.query(
         `UPDATE quotation SET name=$1, customer_id=$2, contact_id=$3, opportunity_id=$4, quote_type=$5,
            currency=$6, order_discount_rate=$7, other_charges=$8, discount=$9,
-           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14 WHERE quotation_id=$10`,
+           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14, group_id=$15 WHERE quotation_id=$10`,
         [d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency, d.orderDiscountRate, otherChargesSum(d), d.discount, req.params.id,
-         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? [])],
+         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? []), d.groupId ?? null],
       );
       await writeLines(c, Number(req.params.id), d.lines);
     });
     const row = await one(`SELECT q.*, c.name customer_name FROM quotation q LEFT JOIN customer c ON c.customer_id=q.customer_id WHERE q.quotation_id=$1`, [req.params.id]);
     ok(res, mapQuotation(row));
+  }),
+);
+
+// 生成合同：集团报价可指定集团下子公司为签约主体（形成 报价=集团、签约=子公司）
+quotationsRouter.post(
+  '/quotations/:id/to-contract',
+  ah(async (req, res) => {
+    const { orgId, userId } = ctx(req);
+    const q = await one<any>(`SELECT * FROM quotation WHERE quotation_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+    if (!q) return fail(res, '报价单不存在', 1, 404);
+    const signId = Number(req.body?.signCustomerId || q.customer_id);
+    // 签约主体校验：= 报价客户，或与报价客户/报价集团同属一个集团
+    const sign = await one<any>(`SELECT customer_id, name, group_id FROM customer WHERE customer_id=$1 AND organization_id=$2`, [signId, orgId]);
+    if (!sign) return fail(res, '签约主体不存在');
+    if (signId !== q.customer_id) {
+      const qGroup = q.group_id ?? (await one<any>(`SELECT group_id FROM customer WHERE customer_id=$1`, [q.customer_id]))?.group_id;
+      if (!qGroup || sign.group_id !== qGroup) return fail(res, '签约主体须为该集团下的子公司');
+    }
+    const begin = req.body?.beginDate ?? new Date().toISOString().slice(0, 10);
+    const seq = await one<{ n: number }>(`SELECT count(*)+1 AS n FROM contract WHERE organization_id=$1`, [orgId]);
+    const code = `HT${new Date().getFullYear()}${String(seq!.n).padStart(4, '0')}`;
+    const row = await one<any>(
+      `INSERT INTO contract (organization_id, code, name, customer_id, quotation_id, opportunity_id, contract_type, renew_type,
+         begin_date, expired_date, currency, status, amount, gross_profit, leader_id)
+       VALUES ($1,$2,$3,$4,$5,$6,1,1,$7,
+         CASE WHEN $8::int IS NOT NULL THEN ($7::date + ($8::int || ' months')::interval)::date ELSE NULL END,
+         $9,1,$10,$11,$12) RETURNING contract_id, code, expired_date`,
+      [orgId, code, `${sign.name} 服务合同`, signId, q.quotation_id, q.opportunity_id ?? null,
+       begin, q.contract_term ?? null, q.currency, q.amount, q.gross_profit, userId],
+    );
+    await one(`UPDATE quotation SET status=3 WHERE quotation_id=$1`, [q.quotation_id]); // 已生成合同
+    ok(res, { contractId: row.contract_id, code: row.code, signCustomerId: signId, expiredDate: row.expired_date });
   }),
 );
 

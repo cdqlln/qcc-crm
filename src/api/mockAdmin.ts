@@ -52,3 +52,19 @@ const logs: AuditLog[] = [
 export const auditApi = {
   list: (p: ListParams) => paginate(logs, p, ['action', 'detail', 'userName', 'path']),
 };
+
+// Mock 集成配置（内存）
+let qccCfg: { key: string; secret: string; base: string } | null = null;
+const maskv = (s: string) => (s ? s.slice(0, 4) + '****' + s.slice(-4) : '');
+export const integrationsApi = {
+  qcc: () => delay({
+    enabled: !!qccCfg, source: qccCfg ? 'db' : 'none', base: qccCfg?.base ?? 'https://api.qichacha.com',
+    keyMasked: maskv(qccCfg?.key ?? ''), secretMasked: maskv(qccCfg?.secret ?? ''),
+  }),
+  saveQcc: (input: { key: string; secret: string; base?: string }) => {
+    qccCfg = { key: input.key, secret: input.secret, base: input.base ?? 'https://api.qichacha.com' };
+    return delay({ ok: true });
+  },
+  clearQcc: () => { qccCfg = null; return delay({ ok: true }); },
+  testQcc: (_keyword?: string) => delay({ ok: true, sample: ['小米科技有限责任公司', '小米通讯技术有限公司'] }),
+};

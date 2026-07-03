@@ -2,17 +2,18 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, CheckCircle2, FileDown, Plus, Save, Send, Trash2 } from 'lucide-react';
-import { approvalsApi, customersApi, opportunitiesApi, productsApi, quotationsApi } from '@/api/crm';
+import { approvalsApi, customersApi, groupsApi, opportunitiesApi, productsApi, quotationsApi } from '@/api/crm';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { MoneyText } from '@/components/ui/MoneyText';
 import { StatusTag } from '@/components/ui/StatusTag';
-import { Select } from '@/components/ui/form';
+import { Field, Select } from '@/components/ui/form';
+import { Dialog } from '@/components/ui/Dialog';
 import { useUI } from '@/store/ui';
 import { add, mul, rate, sub, d } from '@/lib/money';
 import { cn } from '@/lib/cn';
 import { PRODUCT_KIND, QUOTE_TYPE, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
-import { CustomerSearchSelect } from '@/components/ui/CustomerSearchSelect';
+import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { printQuotation } from './printQuotation';
 import type { Product, ProductTier } from '@/types';
 
@@ -54,6 +55,9 @@ export function QuotationEditorPage() {
   const otherChargesTotal = ocItems.reduce((s, i) => add(s, i.amount || '0'), '0');
   const [quoteType, setQuoteType] = useState('1'); // 默认询价
   const [customerId, setCustomerId] = useState<number | undefined>();
+  const [groupId, setGroupId] = useState<number | undefined>();
+  const [groupName, setGroupName] = useState<string | undefined>();
+  const [signOpen, setSignOpen] = useState(false);
   const [opportunityId, setOpportunityId] = useState<number | undefined>();
   const [quoteDate, setQuoteDate] = useState('');
   const [expiredDate, setExpiredDate] = useState('');
@@ -109,6 +113,7 @@ export function QuotationEditorPage() {
       );
       setDiscount(existing.discount); setQuoteType(String(existing.quoteType ?? 2));
       setName(existing.name); setCustomerId(existing.customerId); setSavedId(existing.quotationId);
+      setGroupId(existing.groupId ?? undefined); setGroupName(existing.groupName);
       setOpportunityId(existing.opportunityId);
       setQuoteDate((existing.quoteDate ?? '').slice(0, 10));
       setExpiredDate((existing.expiredDate ?? '').slice(0, 10));
@@ -178,7 +183,7 @@ export function QuotationEditorPage() {
 
   const payload = () => ({
     name: name || `${customer?.name ?? ''} ${QUOTE_TYPE[Number(quoteType)].label}单`,
-    customerId: effCustomerId, opportunityId, quoteType: Number(quoteType), currency: 'CNY',
+    customerId: effCustomerId, groupId, opportunityId, quoteType: Number(quoteType), currency: 'CNY',
     orderDiscountRate: orderDiscount, otherCharges: otherChargesTotal, discount,
     otherChargesItems: ocItems.filter((i) => i.name.trim() || Number(i.amount) > 0).map((i) => ({ name: i.name, amount: Number(i.amount || 0) })),
     quoteDate: quoteDate || undefined, expiredDate: expiredDate || undefined,
@@ -251,9 +256,22 @@ export function QuotationEditorPage() {
             ) : (
               <Button variant="primary" onClick={onSubmit} disabled={busy}><Send size={14} />提交审批</Button>
             )}
+            <Button onClick={async () => { const sid = await ensureSaved(); if (sid) setSignOpen(true); }} disabled={busy}>
+              生成合同
+            </Button>
           </>
         }
       />
+
+      {signOpen && (persistedId ?? savedId) && (
+        <SignEntityDialog
+          quotationId={(persistedId ?? savedId)!}
+          groupId={groupId ?? customer?.groupId ?? undefined}
+          defaultCustomerId={effCustomerId}
+          defaultCustomerName={customer?.name}
+          onClose={() => setSignOpen(false)}
+        />
+      )}
 
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 space-y-4">
@@ -270,10 +288,16 @@ export function QuotationEditorPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-text">客户</label>
                 {isNew ? (
-                  <CustomerSearchSelect
+                  <EntitySearchSelect
                     value={customerId}
-                    valueName={customer?.name}
-                    onChange={(id) => { setCustomerId(id); setOpportunityId(undefined); }}
+                    valueName={groupId ? `${groupName ?? '集团'}（集团报价）` : customer?.name}
+                    onChange={(id) => { setCustomerId(id); setGroupId(undefined); setGroupName(undefined); setOpportunityId(undefined); }}
+                    onPickGroup={(gid, gname, mainId) => {
+                      setGroupId(gid); setGroupName(gname);
+                      setCustomerId(mainId); // 主成员承载分级/历史价，签约主体生成合同时再选
+                      setOpportunityId(undefined);
+                      toast(`已按集团报价：${gname}（签约主体在生成合同时选择）`, 'info');
+                    }}
                   />
                 ) : (
                   <span className="flex h-9 items-center text-sm text-text">{existing?.customerName ?? '—'}</span>
@@ -513,5 +537,63 @@ function NumInput({ value, onChange, width = 'w-20', className }: { value: strin
   return (
     <input value={value} onChange={(e) => onChange(e.target.value)}
       className={cn('h-7 rounded border border-border px-2 text-right text-sm tabular-nums outline-none focus:border-primary', width, className)} />
+  );
+}
+
+// 生成合同：选择签约主体（集团报价时可选集团下子公司）
+function SignEntityDialog({ quotationId, groupId, defaultCustomerId, defaultCustomerName, onClose }: {
+  quotationId: number; groupId?: number; defaultCustomerId?: number; defaultCustomerName?: string; onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const toast = useUI((s) => s.toast);
+  const [signId, setSignId] = useState<number | undefined>(defaultCustomerId);
+  const [beginDate, setBeginDate] = useState(new Date().toISOString().slice(0, 10));
+  const [busy, setBusy] = useState(false);
+  const { data: members = [] } = useQuery({
+    queryKey: ['group-members', groupId],
+    queryFn: () => groupsApi.members(groupId!),
+    enabled: !!groupId,
+  });
+  const options = members.length
+    ? members
+    : defaultCustomerId
+    ? [{ customerId: defaultCustomerId, name: defaultCustomerName ?? `客户 ${defaultCustomerId}` } as any]
+    : [];
+
+  const submit = async () => {
+    if (!signId) return toast('请选择签约主体', 'error');
+    setBusy(true);
+    try {
+      const r = await quotationsApi.toContract(quotationId, { signCustomerId: signId, beginDate });
+      toast(`合同 ${r.code} 已生成（签约主体已锁定）`, 'success');
+      onClose();
+      navigate(`/contracts/${r.contractId}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '生成失败', 'error');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onClose={onClose} title="生成合同 · 选择签约主体" width="w-[480px]"
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={submit} disabled={busy}>{busy ? '生成中…' : '生成合同'}</Button></>}>
+      <div className="space-y-4">
+        {groupId ? (
+          <p className="rounded-md bg-primary-weak/60 px-3 py-2 text-xs text-primary">集团报价：签约及开票主体可为集团下任一子公司，与实际业务一致。</p>
+        ) : null}
+        <Field label="签约主体" required>
+          <Select value={signId ?? ''} onChange={(e) => setSignId(Number(e.target.value) || undefined)}>
+            <option value="">请选择</option>
+            {options.map((m: any) => <option key={m.customerId} value={m.customerId}>{m.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="合同开始日期">
+          <input type="date" value={beginDate} onChange={(e) => setBeginDate(e.target.value)}
+            className="h-9 w-44 rounded-md border border-border px-3 text-sm outline-none focus:border-primary" />
+        </Field>
+        <p className="text-xs text-text-faint">到期日=开始日+报价单「合同限期」；合同金额/毛利继承自报价单。</p>
+      </div>
+    </Dialog>
   );
 }

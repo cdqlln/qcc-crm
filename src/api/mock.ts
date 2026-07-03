@@ -202,6 +202,15 @@ export const customersApi = {
     if (c) { c.trackingNum = (c.trackingNum ?? 0) + 1; c.trackingUpdateDate = row.createDate; if (input.nextTrackingDate) c.nextTrackingDate = input.nextTrackingDate; }
     return delay(row);
   },
+  companySearch: (kw: string): Promise<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }> =>
+    delay({
+      enabled: true,
+      list: kw.length < 2 ? [] : [
+        { keyNo: `MOCK_${kw}_1`, name: `${kw}科技有限公司`, operName: '张三', status: '存续' },
+        { keyNo: `MOCK_${kw}_2`, name: `${kw}信息技术有限公司`, operName: '李四', status: '存续' },
+        { keyNo: `MOCK_${kw}_3`, name: `${kw}集团股份有限公司`, operName: '王五', status: '存续' },
+      ],
+    }),
   lastQuotePrices: (customerId: number) => {
     const qids = new Set(quotations.filter((q) => q.customerId === customerId).map((q) => q.quotationId));
     const byProduct: Record<number, any> = {};
@@ -321,6 +330,22 @@ export const quotationsApi = {
     if (q) { q.customerConfirmed = true; q.status = 1; }
     return delay(q);
   },
+  toContract: (id: number, input: { signCustomerId: number; beginDate?: string }) => {
+    const q = quotations.find((x) => x.quotationId === id) as any;
+    const sign = customers.find((c) => c.customerId === input.signCustomerId);
+    const cid = contracts.reduce((m, c) => Math.max(m, c.contractId), 0) + 1;
+    const code = `HT${new Date().getFullYear()}${String(cid).padStart(4, '0')}`;
+    contracts.unshift({
+      contractId: cid, code, name: `${sign?.name ?? ''} 服务合同`, customerId: input.signCustomerId,
+      customerName: sign?.name, quotationId: id, contractType: 1, renewType: 1,
+      beginDate: input.beginDate, currency: 'CNY', status: 1, amount: q?.amount ?? '0',
+      receivedAmount: '0.00', outstandingAmount: q?.amount ?? '0', badDebtsAmount: '0.00', receivedRate: '0',
+      invoiceAmount: '0.00', notInvoiceAmount: q?.amount ?? '0', grossProfit: q?.grossProfit ?? '0',
+      cashProfit: '0.00', approval: -1, changeApproval: -1, archive: false, leaderId: 1,
+    } as any);
+    if (q) q.status = 3;
+    return delay({ contractId: cid, code, signCustomerId: input.signCustomerId });
+  },
 };
 
 // ---------- 合同 §6.6 ----------
@@ -336,6 +361,22 @@ export const contractsApi = {
   payments: (contractId: number) => delay(payments.filter((p) => p.contractId === contractId)),
   paymentSheets: (contractId: number) => delay(paymentSheets.filter((s) => s.contractId === contractId)),
   invoices: (contractId: number) => delay(invoices.filter((i) => i.contractId === contractId)),
+  createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) => {
+    const ct = contracts.find((c) => c.contractId === contractId) as any;
+    const title = customers.find((c) => c.customerId === (input.titleCustomerId ?? ct?.customerId));
+    const iid = invoices.reduce((m, i) => Math.max(m, i.invoiceId), 0) + 1;
+    const noTax = (Number(input.amount) / 1.06).toFixed(2);
+    const row: any = {
+      invoiceId: iid, code: `FP${new Date().getFullYear()}${String(iid).padStart(5, '0')}`,
+      contractId, customerId: title?.customerId, customerName: title?.name,
+      invoiceType: input.invoiceTypeTerm ?? 130, redBlueFlag: 1, invoiceAttributes: 2,
+      amount: input.amount, taxAmount: (Number(input.amount) - Number(noTax)).toFixed(2), noTaxAmount: noTax,
+      status: 1, approval: -1, invalidApproval: -1, createDate: dayjs().toISOString(),
+    };
+    invoices.unshift(row);
+    if (ct) { ct.invoiceAmount = (Number(ct.invoiceAmount) + Number(input.amount)).toFixed(2); ct.notInvoiceAmount = (Number(ct.amount) - Number(ct.invoiceAmount)).toFixed(2); }
+    return delay(row);
+  },
   create: (input: Partial<Contract>) => {
     const id = nextId(contracts, 'contractId');
     const cust = customers.find((c) => c.customerId === input.customerId);

@@ -102,6 +102,10 @@ export const customersApi = {
   createTracking: (customerId: number, input: import('@/types').TrackingInput) =>
     post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
+  companySearch: (kw: string) =>
+    get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }>(
+      `/company-search?kw=${encodeURIComponent(kw)}`,
+    ),
   lastQuotePrices: (customerId: number) =>
     get<{ productId: number; unitPrice: string; discountRate: string; code: string; quoteDate?: string }[]>(
       `/customers/${customerId}/last-quote-prices`,
@@ -127,6 +131,8 @@ export const quotationsApi = {
   create: (input: unknown) => post<Quotation>('/quotations', input),
   update: (id: number, input: unknown) => put<Quotation>(`/quotations/${id}`, input),
   confirm: (id: number) => post<Quotation>(`/quotations/${id}/confirm`),
+  toContract: (id: number, input: { signCustomerId: number; beginDate?: string }) =>
+    post<{ contractId: number; code: string; signCustomerId: number; expiredDate?: string }>(`/quotations/${id}/to-contract`, input),
 };
 
 export const contractsApi = {
@@ -136,6 +142,8 @@ export const contractsApi = {
   paymentSheets: (_contractId: number) => Promise.resolve([] as never[]),
   invoices: (contractId: number) => get<Invoice[]>(`/contracts/${contractId}/invoices`),
   create: (input: Record<string, unknown>) => post<Contract>('/contracts', input),
+  createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) =>
+    post<Invoice>(`/contracts/${contractId}/invoices`, input),
 };
 
 export const paymentsApi = {
@@ -230,6 +238,12 @@ export const dictApi = {
 };
 export const auditApi = {
   list: (p: ListParams) => list<AuditLog>('/audit-logs', p),
+};
+export const integrationsApi = {
+  qcc: () => get<{ enabled: boolean; source: string; base: string; keyMasked: string; secretMasked: string }>('/integrations/qcc'),
+  saveQcc: (input: { key: string; secret: string; base?: string }) => put('/integrations/qcc', input),
+  clearQcc: () => req('/integrations/qcc', { method: 'DELETE' }),
+  testQcc: (keyword?: string) => post<{ ok: boolean; sample: string[] }>('/integrations/qcc/test', { keyword }),
 };
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),

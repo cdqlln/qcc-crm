@@ -5,6 +5,8 @@ import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList } from '../list.js';
 import { requirePermission } from '../auth.js';
 import { mapTerm } from '../mappers.js';
+import { getSetting, setSetting } from '../services/settings.js';
+import { fuzzySearch, getQccCfg } from '../services/qcc.js';
 
 export const adminRouter = Router();
 
@@ -72,6 +74,54 @@ adminRouter.delete('/dict/:id', requirePermission('system.dict'), ah(async (req,
   const r = await one(`DELETE FROM term WHERE term_id=$1 AND organization_id=$2 RETURNING term_id`, [req.params.id, orgId]);
   if (!r) return fail(res, '系统级字典不可删除', 1, 403);
   ok(res, { ok: true });
+}));
+
+// ---------- 集成配置（system.integration）：企查查凭据管理员端维护，不入库仓库 ----------
+const mask = (s: string | null | undefined) => (s ? s.slice(0, 4) + '****' + s.slice(-4) : '');
+
+adminRouter.get('/integrations/qcc', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const cfg = await getQccCfg(orgId);
+  const fromDb = !!(await getSetting(orgId, 'qcc.key'));
+  ok(res, {
+    enabled: cfg.enabled,
+    source: fromDb ? 'db' : cfg.enabled ? 'env' : 'none',
+    base: cfg.base,
+    keyMasked: mask(cfg.key),
+    secretMasked: mask(cfg.secret),
+  });
+}));
+
+const qccSchema = z.object({
+  key: z.string().min(8),
+  secret: z.string().min(8),
+  base: z.string().url().optional(),
+});
+adminRouter.put('/integrations/qcc', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const d = qccSchema.parse(req.body);
+  await setSetting(orgId, 'qcc.key', d.key.trim());
+  await setSetting(orgId, 'qcc.secret', d.secret.trim());
+  if (d.base) await setSetting(orgId, 'qcc.base', d.base.trim());
+  ok(res, { ok: true });
+}));
+
+adminRouter.delete('/integrations/qcc', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  await setSetting(orgId, 'qcc.key', null);
+  await setSetting(orgId, 'qcc.secret', null);
+  await setSetting(orgId, 'qcc.base', null);
+  ok(res, { ok: true });
+}));
+
+// 连通性测试：用当前配置调 FuzzySearch
+adminRouter.post('/integrations/qcc/test', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled) return fail(res, '尚未配置 Key/SecretKey');
+  const list = await fuzzySearch(orgId, String(req.body?.keyword || '小米科技'));
+  if (list === null) return fail(res, '调用失败：请检查凭据、账号额度或服务器出口 IP 是否境内');
+  ok(res, { ok: true, sample: list.slice(0, 3).map((c) => c.name) });
 }));
 
 // ---------- 日志审计（system.audit）----------

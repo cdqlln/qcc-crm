@@ -101,6 +101,8 @@ export const mapQuotation = (r: any) => ({
   name: r.name,
   customerId: r.customer_id,
   customerName: r.customer_name,
+  groupId: r.group_id,
+  groupName: r.group_name,
   contactId: r.contact_id,
   opportunityId: r.opportunity_id,
   bidderId: r.bidder_id,
