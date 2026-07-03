@@ -1,5 +1,5 @@
 import { one } from '../db.js';
-import { belongGroup, qccEnabled } from './qcc.js';
+import { belongGroup, getQccCfg } from './qcc.js';
 
 export interface GroupRel {
   extKey: string;       // 集团/实控人外部标识
@@ -18,10 +18,11 @@ function nameToKey(name: string): string {
  *  2) 否则查 company_relation 映射表（开发/演示）；
  *  3) 再否则按字号兜底。
  */
-export async function resolveGroup(refCompanyId: string | null | undefined, name: string): Promise<GroupRel> {
-  if (qccEnabled()) {
+export async function resolveGroup(orgId: number, refCompanyId: string | null | undefined, name: string): Promise<GroupRel> {
+  const cfg = await getQccCfg(orgId);
+  if (cfg.enabled) {
     // BelongGroup 支持 统一社会信用代码 或 企业名称
-    const g = await belongGroup(name);
+    const g = await belongGroup(orgId, name);
     if (g) return { extKey: g.groupKeyNo, groupName: g.groupName };
     // null=确认无集团：返回独立键，避免把无关公司拼在一起；
     // undefined=接口出错/风控（如境外IP 121）：继续走下方映射表/字号兜底

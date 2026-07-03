@@ -25,6 +25,7 @@ import { RolesPage } from '@/features/settings/RolesPage';
 import { OrgPage } from '@/features/settings/OrgPage';
 import { DictPage } from '@/features/settings/DictPage';
 import { AuditPage } from '@/features/settings/AuditPage';
+import { IntegrationsPage } from '@/features/settings/IntegrationsPage';
 import { PlaceholderPage } from '@/features/settings/PlaceholderPage';
 import { SignPage } from '@/features/collab/SignPage';
 import { TicketsPage } from '@/features/collab/TicketsPage';
@@ -66,6 +67,7 @@ export const router = createBrowserRouter([
       { path: 'settings/org', element: <OrgPage /> },
       { path: 'settings/dict', element: <DictPage /> },
       { path: 'settings/audit', element: <AuditPage /> },
+      { path: 'settings/integrations', element: <IntegrationsPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'settings/company', element: <PlaceholderPage title="企业工商" /> },
       { path: 'sign', element: <SignPage /> },

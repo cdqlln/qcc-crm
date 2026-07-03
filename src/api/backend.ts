@@ -235,6 +235,12 @@ export const dictApi = {
 export const auditApi = {
   list: (p: ListParams) => list<AuditLog>('/audit-logs', p),
 };
+export const integrationsApi = {
+  qcc: () => get<{ enabled: boolean; source: string; base: string; keyMasked: string; secretMasked: string }>('/integrations/qcc'),
+  saveQcc: (input: { key: string; secret: string; base?: string }) => put('/integrations/qcc', input),
+  clearQcc: () => req('/integrations/qcc', { method: 'DELETE' }),
+  testQcc: (keyword?: string) => post<{ ok: boolean; sample: string[] }>('/integrations/qcc/test', { keyword }),
+};
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),
   updateInfo: (name: string) => put('/org', { name }),

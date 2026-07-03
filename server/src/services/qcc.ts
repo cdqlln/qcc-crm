@@ -1,42 +1,52 @@
 import crypto from 'node:crypto';
+import { getSetting } from './settings.js';
 
 // 企查查开放平台客户端
 // 鉴权：Headers Token = MD5(key + Timespan + SecretKey) 大写；Timespan = Unix 秒
-const CFG = {
-  base: process.env.QCC_API_BASE ?? 'https://api.qichacha.com',
-  key: process.env.QCC_API_KEY ?? '',
-  secret: process.env.QCC_SECRET_KEY ?? '',
-  get enabled() {
-    return !!(this.key && this.secret);
-  },
-};
+// 凭据来源：system_setting（管理员端配置，优先） → 环境变量（兜底）
+export interface QccCfg {
+  base: string;
+  key: string;
+  secret: string;
+  enabled: boolean;
+}
 
-function authHeaders(): Record<string, string> {
+export async function getQccCfg(orgId: number): Promise<QccCfg> {
+  const [dbKey, dbSecret, dbBase] = await Promise.all([
+    getSetting(orgId, 'qcc.key'),
+    getSetting(orgId, 'qcc.secret'),
+    getSetting(orgId, 'qcc.base'),
+  ]);
+  const key = dbKey || process.env.QCC_API_KEY || '';
+  const secret = dbSecret || process.env.QCC_SECRET_KEY || '';
+  const base = dbBase || process.env.QCC_API_BASE || 'https://api.qichacha.com';
+  return { base, key, secret, enabled: !!(key && secret) };
+}
+
+function authHeaders(cfg: QccCfg): Record<string, string> {
   const timespan = String(Math.floor(Date.now() / 1000));
-  const token = crypto.createHash('md5').update(CFG.key + timespan + CFG.secret).digest('hex').toUpperCase();
+  const token = crypto.createHash('md5').update(cfg.key + timespan + cfg.secret).digest('hex').toUpperCase();
   return { Token: token, Timespan: timespan };
 }
 
 export interface QccCompany {
-  keyNo: string;        // 企查查公司ID
-  name: string;         // 公司名
-  creditCode?: string;  // 统一社会信用代码
-  operName?: string;    // 法人
-  status?: string;      // 经营状态
+  keyNo: string;
+  name: string;
+  creditCode?: string;
+  operName?: string;
+  status?: string;
   startDate?: string;
   address?: string;
 }
 
-export const qccEnabled = () => CFG.enabled;
-
-/** 模糊搜索企业（名称补全）。未配置凭据或失败时返回 null 交由调用方降级。 */
-export async function fuzzySearch(searchKey: string, pageIndex = 1): Promise<QccCompany[] | null> {
-  if (!CFG.enabled || !searchKey.trim()) return null;
-  const url = `${CFG.base}/FuzzySearch/GetList?key=${encodeURIComponent(CFG.key)}&searchKey=${encodeURIComponent(searchKey)}&pageIndex=${pageIndex}`;
+/** 模糊搜索企业（名称补全）。未配置/失败返回 null。 */
+export async function fuzzySearch(orgId: number, searchKey: string, pageIndex = 1): Promise<QccCompany[] | null> {
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled || !searchKey.trim()) return null;
+  const url = `${cfg.base}/FuzzySearch/GetList?key=${encodeURIComponent(cfg.key)}&searchKey=${encodeURIComponent(searchKey)}&pageIndex=${pageIndex}`;
   try {
-    const res = await fetch(url, { headers: authHeaders(), signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { headers: authHeaders(cfg), signal: AbortSignal.timeout(8000) });
     const body = (await res.json()) as any;
-    // 企查查约定：Status "200" 成功；Result 为数组
     if (String(body.Status) !== '200' || !Array.isArray(body.Result)) {
       console.warn('[qcc] FuzzySearch non-200:', body.Status, body.Message);
       return null;
@@ -57,19 +67,20 @@ export async function fuzzySearch(searchKey: string, pageIndex = 1): Promise<Qcc
 }
 
 export interface QccGroup {
-  groupKeyNo: string;   // 集团标识
-  groupName: string;    // 集团名称
+  groupKeyNo: string;
+  groupName: string;
 }
 
 /**
  * 查询企业所属集团（searchKey=统一社会信用代码或企业名称）。
- * 返回：QccGroup=有集团；null=确认无集团(201查空)；undefined=接口出错/风控（调用方应降级兜底）。
+ * 返回：QccGroup=有集团；null=确认无集团(201查空)；undefined=未配置/接口出错（调用方降级）。
  */
-export async function belongGroup(searchKey: string): Promise<QccGroup | null | undefined> {
-  if (!CFG.enabled || !searchKey.trim()) return undefined;
-  const url = `${CFG.base}/BelongGroup/GetInfo?key=${encodeURIComponent(CFG.key)}&searchKey=${encodeURIComponent(searchKey)}`;
+export async function belongGroup(orgId: number, searchKey: string): Promise<QccGroup | null | undefined> {
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled || !searchKey.trim()) return undefined;
+  const url = `${cfg.base}/BelongGroup/GetInfo?key=${encodeURIComponent(cfg.key)}&searchKey=${encodeURIComponent(searchKey)}`;
   try {
-    const res = await fetch(url, { headers: authHeaders(), signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { headers: authHeaders(cfg), signal: AbortSignal.timeout(8000) });
     const body = (await res.json()) as any;
     if (String(body.Status) === '201') return null; // 查空：确认无集团
     if (String(body.Status) !== '200' || !body.Result) {

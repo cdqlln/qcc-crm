@@ -9,7 +9,7 @@ export const groupsRouter = Router();
 
 // 按工商关系自动归集：解析客户集团标识 → 同集团(ext_key)客户归到一起
 export async function autoAttachGroup(orgId: number, customerId: number, name: string, refCompanyId?: string | null) {
-  const { extKey, groupName } = await resolveGroup(refCompanyId, name);
+  const { extKey, groupName } = await resolveGroup(orgId, refCompanyId, name);
   await one(`UPDATE customer SET ext_key=$1 WHERE customer_id=$2`, [extKey, customerId]);
   const g = await one<any>(`SELECT group_id FROM customer_group WHERE organization_id=$1 AND ext_key=$2`, [orgId, extKey]);
   if (g) {

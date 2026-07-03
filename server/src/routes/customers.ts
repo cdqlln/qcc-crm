@@ -7,7 +7,7 @@ import { mapContact, mapCustomer, mapTracking } from '../mappers.js';
 import { createApprovalTask } from './approvals.js';
 import { autoAttachGroup } from './groups.js';
 import { dataScopeCond } from '../auth.js';
-import { fuzzySearch, qccEnabled } from '../services/qcc.js';
+import { fuzzySearch, getQccCfg } from '../services/qcc.js';
 
 export const customersRouter = Router();
 
@@ -75,10 +75,12 @@ customersRouter.get(
 
 // 工商企业名称补全（企查查 FuzzySearch）；未配置凭据时返回 enabled:false 由前端降级
 customersRouter.get('/company-search', ah(async (req, res) => {
+  const { orgId } = ctx(req);
   const kw = String(req.query.kw ?? '').trim();
-  if (!qccEnabled()) return ok(res, { enabled: false, list: [] });
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled) return ok(res, { enabled: false, list: [] });
   if (kw.length < 2) return ok(res, { enabled: true, list: [] });
-  const list = await fuzzySearch(kw);
+  const list = await fuzzySearch(orgId, kw);
   ok(res, { enabled: true, list: list ?? [] });
 }));
 
