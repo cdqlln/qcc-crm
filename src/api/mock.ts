@@ -202,15 +202,9 @@ export const customersApi = {
     if (c) { c.trackingNum = (c.trackingNum ?? 0) + 1; c.trackingUpdateDate = row.createDate; if (input.nextTrackingDate) c.nextTrackingDate = input.nextTrackingDate; }
     return delay(row);
   },
-  companySearch: (kw: string): Promise<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }> =>
-    delay({
-      enabled: true,
-      list: kw.length < 2 ? [] : [
-        { keyNo: `MOCK_${kw}_1`, name: `${kw}科技有限公司`, operName: '张三', status: '存续' },
-        { keyNo: `MOCK_${kw}_2`, name: `${kw}信息技术有限公司`, operName: '李四', status: '存续' },
-        { keyNo: `MOCK_${kw}_3`, name: `${kw}集团股份有限公司`, operName: '王五', status: '存续' },
-      ],
-    }),
+  // 工商数据必须来自真实企查查 API，Mock 模式不捏造 → enabled:false（前端隐藏工商候选段）
+  companySearch: (_kw: string): Promise<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }> =>
+    delay({ enabled: false, list: [] }),
   lastQuotePrices: (customerId: number) => {
     const qids = new Set(quotations.filter((q) => q.customerId === customerId).map((q) => q.quotationId));
     const byProduct: Record<number, any> = {};

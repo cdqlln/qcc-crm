@@ -52,7 +52,7 @@ export function EntitySearchSelect({
   // 1) 我的客户
   const custQ = useQuery({
     queryKey: ['entity-cust', kw],
-    queryFn: () => customersApi.list({ page: 1, pageSize: 8, keyword: kw, tab: 'all' }),
+    queryFn: () => customersApi.list({ page: 1, pageSize: 10, keyword: kw, tab: 'all' }),
     enabled: open && kw.length >= 1,
   });
   const customers = custQ.data?.list ?? [];
@@ -80,7 +80,7 @@ export function EntitySearchSelect({
     ...customers.map((c) => c.name),
     ...(membersQ.data ?? []).flatMap((x) => x.members.map((m) => m.name)),
   ]);
-  const externals = (extQ.data?.enabled ? extQ.data.list : []).filter((c) => !existingNames.has(c.name)).slice(0, 5);
+  const externals = (extQ.data?.enabled ? extQ.data.list : []).filter((c) => !existingNames.has(c.name)).slice(0, 10);
 
   const pick = (id: number, name: string) => {
     onChange(id, name);
@@ -133,7 +133,7 @@ export function EntitySearchSelect({
         />
       </div>
       {open && kw.length >= 1 && (
-        <div className="absolute z-40 mt-1 max-h-80 w-[26rem] max-w-[80vw] overflow-auto rounded-lg border border-border bg-surface py-1 shadow-card">
+        <div className="absolute z-40 mt-1 max-h-96 w-[26rem] max-w-[80vw] overflow-y-auto rounded-lg border border-border bg-surface py-1 shadow-card">
           {/* 我的客户 */}
           <SectionTitle text="我的客户" />
           {custQ.isFetching && <Hint text="搜索中…" />}
