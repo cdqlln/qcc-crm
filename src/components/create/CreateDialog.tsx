@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, type UseFormRegister, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,6 +8,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/primitives';
 import { Field, Select, TextInput } from '@/components/ui/form';
 import { CompanyNameInput } from '@/components/ui/CompanyNameInput';
+import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { useCreate, type CreatableEntity } from '@/store/create';
 import { useUI } from '@/store/ui';
 import { useTerm } from '@/hooks/useTerms';
@@ -254,8 +256,12 @@ function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<OpportunityForm>({ resolver: zodResolver(opportunitySchema), defaultValues: preset as any });
+  const custId = watch('customerId');
+  const [custName, setCustName] = useState<string | undefined>(undefined);
 
   const onSubmit = async (data: OpportunityForm) => {
     await opportunitiesApi.create(data);
@@ -271,7 +277,17 @@ function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="商机名称" required error={errors.name?.message} className="col-span-2">
           <TextInput invalid={!!errors.name} placeholder="如：某某客户·专业版采购" {...register('name')} />
         </Field>
-        <CustomerSelect register={register} errors={errors} defaultValue={preset?.customerId as number} />
+        <Field label="客户 / 集团主体" required error={errors.customerId?.message as string} hint="可直接输入公司或集团名称，工商候选可自动建档">
+          <EntitySearchSelect
+            value={custId ? Number(custId) : undefined}
+            valueName={custName}
+            invalid={!!errors.customerId}
+            onChange={(id, name) => {
+              setValue('customerId', (id ?? '') as any, { shouldValidate: true });
+              setCustName(name);
+            }}
+          />
+        </Field>
         <Field label="预计成交金额" required error={errors.estimatedAmount?.message}>
           <TextInput invalid={!!errors.estimatedAmount} inputMode="decimal" placeholder="0.00" {...register('estimatedAmount')} />
         </Field>

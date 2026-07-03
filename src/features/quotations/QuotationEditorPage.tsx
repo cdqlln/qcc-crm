@@ -12,7 +12,7 @@ import { useUI } from '@/store/ui';
 import { add, mul, rate, sub, d } from '@/lib/money';
 import { cn } from '@/lib/cn';
 import { PRODUCT_KIND, QUOTE_TYPE, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
-import { CustomerSearchSelect } from '@/components/ui/CustomerSearchSelect';
+import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { printQuotation } from './printQuotation';
 import type { Product, ProductTier } from '@/types';
 
@@ -270,7 +270,7 @@ export function QuotationEditorPage() {
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-text">客户</label>
                 {isNew ? (
-                  <CustomerSearchSelect
+                  <EntitySearchSelect
                     value={customerId}
                     valueName={customer?.name}
                     onChange={(id) => { setCustomerId(id); setOpportunityId(undefined); }}
