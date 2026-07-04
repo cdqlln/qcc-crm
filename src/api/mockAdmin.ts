@@ -55,6 +55,7 @@ export const auditApi = {
 
 // Mock 集成配置（内存）
 let qccCfg: { key: string; secret: string; base: string } | null = null;
+let aiCfg: { provider: 'anthropic' | 'openai-compatible'; key: string; model: string; base: string } | null = null;
 const maskv = (s: string) => (s ? s.slice(0, 4) + '****' + s.slice(-4) : '');
 export const integrationsApi = {
   qcc: () => delay({
@@ -67,4 +68,15 @@ export const integrationsApi = {
   },
   clearQcc: () => { qccCfg = null; return delay({ ok: true }); },
   testQcc: (_keyword?: string) => delay({ ok: true, sample: ['小米科技有限责任公司', '小米通讯技术有限公司'] }),
+  // Mock AI 模型配置（仅内存演示；真实模型调用需后端）
+  ai: () => delay<import('@/types').AiIntegrationCfg>({
+    enabled: !!aiCfg, source: aiCfg ? 'db' : 'none',
+    provider: aiCfg?.provider ?? 'anthropic', base: aiCfg?.base ?? '', model: aiCfg?.model ?? '', keyMasked: maskv(aiCfg?.key ?? ''),
+  }),
+  saveAi: (input: { provider: 'anthropic' | 'openai-compatible'; key: string; model: string; base?: string }) => {
+    aiCfg = { provider: input.provider, key: input.key, model: input.model, base: input.base ?? '' };
+    return delay({ ok: true });
+  },
+  clearAi: () => { aiCfg = null; return delay({ ok: true }); },
+  testAi: () => delay({ ok: true, model: aiCfg?.model ?? '', sample: 'Mock 模式无法调用真实模型，请部署后端后测试。' }),
 };

@@ -28,6 +28,7 @@ import { Attachments } from '@/components/ui/Attachments';
 import { MoneyText } from '@/components/ui/MoneyText';
 import { StatusTag } from '@/components/ui/StatusTag';
 import { AiPanel } from '@/components/ai/AiPanel';
+import { CustomerInsightPanel } from '@/components/ai/CustomerInsightPanel';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -60,6 +61,7 @@ export function CustomerDetailPage() {
 
   const TABS = [
     { key: 'overview', label: '概览' },
+    { key: 'insight', label: '客户洞察' },
     { key: 'contacts', label: '联系人', count: contactList.length },
     { key: 'tracking', label: '跟进记录', count: trackList.length },
     { key: 'opportunities', label: '商机', count: custOpps.length },
@@ -143,6 +145,8 @@ export function CustomerDetailPage() {
               </div>
             </div>
           )}
+
+          {tab === 'insight' && <CustomerInsightPanel customerId={cid} />}
 
           {tab === 'contacts' && <ContactsTab customerId={cid} />}
 

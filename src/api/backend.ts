@@ -112,6 +112,8 @@ export const customersApi = {
     ),
   transfer: (customerId: number, toUserId: number, reason: string) =>
     post<{ status: number }>(`/customers/${customerId}/transfer`, { toUserId, reason }),
+  insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
+  generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),
 };
 
 export const opportunitiesApi = {
@@ -244,6 +246,11 @@ export const integrationsApi = {
   saveQcc: (input: { key: string; secret: string; base?: string }) => put('/integrations/qcc', input),
   clearQcc: () => req('/integrations/qcc', { method: 'DELETE' }),
   testQcc: (keyword?: string) => post<{ ok: boolean; sample: string[] }>('/integrations/qcc/test', { keyword }),
+  ai: () => get<import('@/types').AiIntegrationCfg>('/integrations/ai'),
+  saveAi: (input: { provider: 'anthropic' | 'openai-compatible'; key: string; model: string; base?: string }) =>
+    put('/integrations/ai', input),
+  clearAi: () => req('/integrations/ai', { method: 'DELETE' }),
+  testAi: () => post<{ ok: boolean; model: string; sample: string }>('/integrations/ai/test'),
 };
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),

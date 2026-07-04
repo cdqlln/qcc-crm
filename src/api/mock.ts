@@ -136,6 +136,118 @@ export const leadsApi = {
   },
 };
 
+// ---------- 客户洞察 Mock：由内存数据按规则生成（与后端未配置模型时口径一致） ----------
+const insightStore = new Map<number, import('@/types').CustomerInsightReport>();
+const tName = (id?: number | null) => MOCK_TERMS.find((t) => t.termId === id)?.name ?? '';
+let mockReportId = 8000;
+
+function buildMockInsight(customerId: number): import('@/types').CustomerInsightReport | null {
+  const c = customers.find((x) => x.customerId === customerId);
+  if (!c) return null;
+  const num = (v: unknown) => Number(v ?? 0) || 0;
+  const myOpps = opportunities.filter((o) => o.customerId === customerId && o.active === 1);
+  const myTrk = trackings.filter((t) => t.customerId === customerId).sort((a, b) => b.createDate.localeCompare(a.createDate)).slice(0, 15);
+  const myCts = contracts.filter((x) => x.customerId === customerId && x.status !== 5);
+  const contractAmount = myCts.reduce((s, x) => s + num(x.amount), 0);
+  const receivedAmount = myCts.reduce((s, x) => s + num(x.receivedAmount), 0);
+  const outstandingAmount = myCts.reduce((s, x) => s + num(x.outstandingAmount), 0);
+  const receivedRate = contractAmount > 0 ? Math.round((receivedAmount / contractAmount) * 10000) / 100 : 0;
+  const leader = userName(c.leaderId) ?? '未分配';
+  const lastAt = c.trackingUpdateDate ? dayjs(c.trackingUpdateDate).format('YYYY-MM-DD') : null;
+  const idle = c.trackingUpdateDate ? dayjs().diff(dayjs(c.trackingUpdateDate), 'day') : null;
+
+  const facts: import('@/types').CustomerFacts = {
+    customer: {
+      name: c.name, level: tName(c.level) || '未分级', industry: c.industry ?? '', groupName: c.groupName ?? '',
+      leader, source: tName(c.source), createdAt: dayjs(c.createDate).format('YYYY-MM-DD'),
+      trackingNum: num(c.trackingNum), lastTrackingAt: lastAt,
+    },
+    contacts: contacts.filter((x) => x.customerId === customerId).slice(0, 10)
+      .map((x) => ({ name: x.name, position: x.position ?? '', isKey: x.type === 1 })),
+    opportunities: myOpps.map((o) => ({
+      name: o.name, amount: num(o.estimatedAmount), stage: tName(o.status) || '未知阶段', stayDays: num(o.allStayTime),
+      leader: userName(o.leaderId) ?? '未分配', expectedDate: o.expiryDate ?? null, mainProduct: (o as any).mainProduct ?? '', competitor: (o as any).competitor ?? '',
+    })),
+    trackings: myTrk.map((t) => ({
+      at: dayjs(t.createDate).format('YYYY-MM-DD'), way: tName(t.trackingType), by: userName(t.createBy) ?? '',
+      comment: (t.comment ?? '').slice(0, 200), nextAt: t.nextTrackingDate ? dayjs(t.nextTrackingDate).format('YYYY-MM-DD') : null,
+    })),
+    contracts: myCts.map((x) => ({
+      name: x.name, amount: num(x.amount), status: ['初始', '已签约', '执行中', '已完毕', '已终止', '已作废'][x.status ?? 0] ?? '',
+      receivedAmount: num(x.receivedAmount), outstandingAmount: num(x.outstandingAmount), receivedRate: num(x.receivedRate),
+      invoiceAmount: num(x.invoiceAmount), leader: userName(x.leaderId) ?? '未分配', beginDate: x.beginDate ?? null, expiredDate: x.expiredDate ?? null,
+    })),
+    overduePayments: payments
+      .filter((p) => p.customerId === customerId && [1, 2, 4].includes(p.status) && p.planDate && dayjs(p.planDate).isBefore(dayjs()) && num(p.outstandingAmount) > 0)
+      .slice(0, 10)
+      .map((p) => ({
+        contractName: contracts.find((x) => x.contractId === p.contractId)?.name ?? '',
+        planDate: dayjs(p.planDate).format('YYYY-MM-DD'), outstanding: num(p.outstandingAmount),
+      })),
+    totals: {
+      oppCount: myOpps.length, oppAmount: myOpps.reduce((s, o) => s + num(o.estimatedAmount), 0),
+      contractCount: myCts.length, contractAmount, receivedAmount, outstandingAmount,
+      invoiceAmount: myCts.reduce((s, x) => s + num(x.invoiceAmount), 0), receivedRate,
+    },
+  };
+
+  const risks: string[] = [];
+  if (facts.overduePayments.length > 0)
+    risks.push(`${facts.overduePayments.length} 笔回款计划已逾期，合计 ¥${facts.overduePayments.reduce((s, p) => s + p.outstanding, 0).toLocaleString()}`);
+  if (idle != null && idle > 14) risks.push(`已 ${idle} 天无跟进记录，客户关系存在冷却风险`);
+  for (const o of facts.opportunities) if (o.stayDays > 21) risks.push(`商机「${o.name}」在${o.stage}停留 ${o.stayDays} 天，推进偏慢`);
+  if (facts.totals.contractCount > 0 && receivedRate < 60) risks.push(`整体回款率 ${receivedRate}%，低于健康水位（60%）`);
+  if (risks.length === 0) risks.push('暂无明显风险信号');
+
+  let score = 60;
+  if (idle != null && idle <= 7) score += 10; else if (idle == null || idle > 14) score -= 15;
+  if (facts.totals.oppCount > 0) score += 10;
+  if (facts.totals.contractCount > 0) score += receivedRate >= 80 ? 15 : receivedRate >= 60 ? 5 : -10;
+  if (facts.overduePayments.length > 0) score -= 10;
+
+  const insight: import('@/types').CustomerInsight = {
+    summary:
+      `${facts.customer.name}（${facts.customer.level}${facts.customer.industry ? ' · ' + facts.customer.industry : ''}）当前由 ${leader} 负责，` +
+      `在途商机 ${facts.totals.oppCount} 个（预计 ¥${facts.totals.oppAmount.toLocaleString()}），历史合同 ${facts.totals.contractCount} 份共 ¥${contractAmount.toLocaleString()}，` +
+      `已回款 ¥${receivedAmount.toLocaleString()}（${receivedRate}%）` + (outstandingAmount > 0 ? `，未回款 ¥${outstandingAmount.toLocaleString()}。` : '。'),
+    healthScore: Math.max(5, Math.min(95, score)),
+    owners: [
+      { role: '客户负责人', name: leader, note: `负责客户整体关系，累计跟进 ${facts.customer.trackingNum} 次` },
+      ...facts.opportunities.slice(0, 3).map((o) => ({ role: '商机负责人', name: o.leader, note: `「${o.name}」处于${o.stage}，预计 ¥${o.amount.toLocaleString()}，已停留 ${o.stayDays} 天` })),
+      ...facts.contracts.filter((x) => x.outstandingAmount > 0).slice(0, 2).map((x) => ({ role: '合同负责人', name: x.leader, note: `「${x.name}」未回款 ¥${x.outstandingAmount.toLocaleString()}（回款率 ${x.receivedRate}%）` })),
+      ...facts.contacts.filter((x) => x.isKey).slice(0, 2).map((x) => ({ role: '客户主联系人', name: x.name, note: x.position || '客户侧关键角色' })),
+    ],
+    progress: {
+      assessment:
+        idle == null ? '尚无跟进记录，需要尽快建立首次触达。'
+        : idle <= 7 ? `跟进节奏健康（最近 ${idle} 天内有动作）。`
+        : idle <= 14 ? `跟进节奏一般（${idle} 天前最后一次），建议本周内安排一次触达。`
+        : `跟进已断档 ${idle} 天，需要立即恢复联系。`,
+      highlights: facts.trackings.slice(0, 5).map((t) => `${t.at} ${t.by}（${t.way || '跟进'}）：${t.comment || '—'}`),
+    },
+    finance: {
+      assessment:
+        facts.totals.contractCount === 0 ? '尚无成交合同，处于商机培育期。'
+        : `历史合同 ${facts.totals.contractCount} 份共 ¥${contractAmount.toLocaleString()}，整体回款率 ${receivedRate}%` +
+          (facts.overduePayments.length > 0 ? '，存在逾期回款需重点催收。' : '，回款进度正常。'),
+      highlights: facts.contracts.slice(0, 5).map((x) =>
+        `「${x.name}」¥${x.amount.toLocaleString()}（${x.status}）：已回款 ¥${x.receivedAmount.toLocaleString()}（${x.receivedRate}%）` +
+        (x.outstandingAmount > 0 ? `，未回款 ¥${x.outstandingAmount.toLocaleString()}` : '')),
+    },
+    risks,
+    nextSteps: (() => {
+      const steps = [
+        ...(facts.overduePayments.length > 0 ? ['安排合同负责人本周内跟进逾期回款'] : []),
+        ...(idle != null && idle > 14 ? [`${leader} 3 日内恢复联系，更新客户近况`] : []),
+        ...facts.opportunities.filter((o) => o.stayDays > 21).slice(0, 2).map((o) => `${o.leader} 与客户确认「${o.name}」卡点，制定阶段推进计划`),
+      ].slice(0, 5);
+      return steps.length > 0 ? steps : ['保持当前跟进节奏，按计划推进在途商机'];
+    })(),
+  };
+
+  return { reportId: ++mockReportId, createdAt: dayjs().toISOString(), facts, insight, generatedBy: 'rules' };
+}
+
 // ---------- 客户 §6.3 ----------
 export const customersApi = {
   list: (p: ListParams) => {
@@ -218,6 +330,13 @@ export const customersApi = {
     return delay(Object.values(byProduct));
   },
   transfer: (_customerId: number, _toUserId: number, _reason: string) => delay({ status: 2 }),
+  // 客户洞察（Mock 无真实模型 → 规则版，generatedBy:'rules'；真实 AI 需后端配置模型）
+  insight: (customerId: number) => delay(insightStore.get(customerId) ?? null),
+  generateInsight: (customerId: number) => {
+    const r = buildMockInsight(customerId);
+    if (r) insightStore.set(customerId, r);
+    return delay(r as NonNullable<typeof r>, 600);
+  },
   create: (input: Partial<Customer>) => {
     const row: Customer = {
       customerId: nextId(customers, 'customerId'),
