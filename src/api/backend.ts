@@ -172,6 +172,8 @@ export const targetsApi = { list: () => get<Target[]>('/targets') };
 export const aiApi = {
   generate: (businessType: 0 | 1 | 2 | 3, businessId: number, stageId?: number) =>
     post<AiReport>('/ai/generate', { businessType, businessId, stageId }),
+  chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
+    post<import('@/types').AiChatResponse>('/ai/chat', { messages }),
 };
 
 export const searchApi = {

@@ -8,6 +8,7 @@ import { SideNav } from './SideNav';
 import { CommandPalette } from './CommandPalette';
 import { Toasts } from './Toasts';
 import { CreateDialog } from '@/components/create/CreateDialog';
+import { AiChatWidget } from '@/components/ai/AiChatWidget';
 import { NAV_GROUPS } from './nav';
 
 const PATH_LABELS: Record<string, string> = {
@@ -76,6 +77,7 @@ export function AppShell() {
       </div>
       <CommandPalette />
       <CreateDialog />
+      <AiChatWidget />
       <Toasts />
     </div>
   );

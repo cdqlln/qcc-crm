@@ -574,6 +574,46 @@ export const targetsApi = {
 export const aiApi = {
   generate: (businessType: 0 | 1 | 2 | 3, businessId: number, stageId?: number) =>
     delay(buildAiReport(businessType, businessId, stageId), 1400),
+  // Mock 对话助手：规则版意图解析（真实自然语言操作需后端 + 配置 AI 模型）
+  chat: async (messages: { role: 'user' | 'assistant'; content: string }[]): Promise<import('@/types').AiChatResponse> => {
+    const text = messages[messages.length - 1]?.content?.trim() ?? '';
+    const actions: import('@/types').AiChatAction[] = [];
+    const findCust = (kw: string) => customers.find((c) => (c.category === 3 || c.category === 4) && c.active === 1 && c.name.includes(kw.trim()));
+    let reply = '';
+    let m: RegExpMatchArray | null;
+
+    if ((m = text.match(/(?:创建|新建|添加).{0,2}客户[：:，,\s]*([^\s，。,：:]{2,30})/))) {
+      const name = m[1];
+      if (customers.some((c) => c.name === name && c.active === 1)) {
+        reply = `客户「${name}」已存在，无需重复创建。`;
+      } else {
+        const created = await customersApi.create({ name, level: 26, source: 4, leaderId: 1 });
+        actions.push({ type: 'customer', label: `已创建客户「${name}」`, link: `/customers/${created.customerId}` });
+        reply = `已创建客户「${name}」（B 级 · 来源：陌拜），负责人为你。可以继续说「给${name}创建商机 预计50万」。`;
+      }
+    } else if ((m = text.match(/(?:给|为)\s*(.{2,30}?)\s*(?:创建|新建|建).{0,2}商机.*?([\d.]+)\s*(万|元)?/))) {
+      const cust = findCust(m[1]);
+      if (!cust) reply = `没找到客户「${m[1].trim()}」，请先创建：「创建客户 ${m[1].trim()}」。`;
+      else {
+        const amount = String(Number(m[2]) * (m[3] === '万' ? 10000 : 1));
+        const r = await leadsApi.toOpportunity(cust.customerId, { name: `${cust.name} 商机`, estimatedAmount: amount });
+        actions.push({ type: 'opportunity', label: `已创建商机（¥${Number(amount).toLocaleString()}）`, link: `/opportunities/${r.opportunityId}` });
+        reply = `已为「${cust.name}」创建商机，预计成交 ¥${Number(amount).toLocaleString()}，初始阶段：需求沟通。`;
+      }
+    } else if ((m = text.match(/(?:给|为)\s*(.{2,30}?)\s*(?:写|加|添加|记).{0,2}跟进[：:，,\s]*(.+)/))) {
+      const cust = findCust(m[1]);
+      if (!cust) reply = `没找到客户「${m[1].trim()}」。`;
+      else {
+        await customersApi.createTracking(cust.customerId, { comment: m[2].trim() });
+        actions.push({ type: 'tracking', label: `已为「${cust.name}」写跟进`, link: `/customers/${cust.customerId}` });
+        reply = `已为「${cust.name}」记录跟进：${m[2].trim()}`;
+      }
+    } else {
+      reply =
+        'Mock 模式为规则版助手，仅支持固定句式：\n· 创建客户 XX科技有限公司\n· 给XX创建商机 预计50万\n· 给XX写跟进 今天电话沟通了需求\n\n部署后端并在「设置→集成配置」配置 AI 模型后，可用自然语言完成建客户/商机/报价单等全部操作。';
+    }
+    return delay({ reply, actions, generatedBy: 'rules' as const }, 500);
+  },
 };
 
 // ---------- 全局搜索（CommandPalette） ----------

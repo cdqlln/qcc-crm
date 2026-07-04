@@ -611,3 +611,16 @@ export interface AiIntegrationCfg {
   model: string;
   keyMasked: string;
 }
+
+// ---- AI 对话助手（工具调用执行 CRM 操作；见 server/src/routes/aiChat.ts） ----
+export interface AiChatAction {
+  type: 'customer' | 'opportunity' | 'quotation' | 'tracking' | 'contact';
+  label: string;
+  link?: string;
+}
+export interface AiChatResponse {
+  reply: string;
+  actions: AiChatAction[];
+  generatedBy: 'llm' | 'rules' | 'none';
+  model?: string;
+}

@@ -32,7 +32,7 @@ export interface CustomerFacts {
   };
 }
 
-async function gatherFacts(orgId: number, customerId: number): Promise<CustomerFacts | null> {
+export async function gatherFacts(orgId: number, customerId: number): Promise<CustomerFacts | null> {
   const cust = await one<any>(
     `SELECT c.*, g.name AS group_name, u.name AS leader_name, lv.name AS level_name, src.name AS source_name
      FROM customer c
