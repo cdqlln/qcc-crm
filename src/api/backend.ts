@@ -180,6 +180,10 @@ export const searchApi = {
   query: (kw: string) => get<SearchHit[]>(`/search?kw=${encodeURIComponent(kw)}`),
 };
 
+export const dashboardApi = {
+  data: (scope: string, time: string) => post<import('@/types').DashboardData>('/dashboard', { scope, time }),
+};
+
 // 附件上传（multipart；不手动设 Content-Type，由浏览器带 boundary）
 export const uploadApi = {
   upload: async (files: File[]): Promise<import('@/types').Attachment[]> => {

@@ -624,3 +624,17 @@ export interface AiChatResponse {
   generatedBy: 'llm' | 'rules' | 'none';
   model?: string;
 }
+
+// ---- 工作台聚合（真实统计；见 server/src/routes/dashboard.ts） ----
+export interface DashboardData {
+  kpis: {
+    newLeads: number; prevLeads: number;
+    newCustomers: number; prevCustomers: number;
+    oppCount: number;
+    contractCount: number; contractAmount: number; receivedAmount: number; outstandingAmount: number;
+  };
+  funnel: { termId: number; count: number }[];
+  conversion: { newLeads: number; converted: number; rate: number };
+  pk: { name: string; amount: number }[];
+  recentTrackings: { by: string; customerId: number; customerName: string; comment: string; priorityLevel: number; at: string }[];
+}

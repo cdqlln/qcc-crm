@@ -16,7 +16,7 @@ import {
   trackings,
 } from '@/mock/data';
 import { MOCK_TERMS } from '@/mock/terms';
-import { userName } from '@/mock/org';
+import { userName, MOCK_USERS, CURRENT_USER } from '@/mock/org';
 import { delay, paginate, type ListParams } from './client';
 import type {
   BackLog,
@@ -613,6 +613,62 @@ export const aiApi = {
         'Mock 模式为规则版助手，仅支持固定句式：\n· 创建客户 XX科技有限公司\n· 给XX创建商机 预计50万\n· 给XX写跟进 今天电话沟通了需求\n\n部署后端并在「设置→集成配置」配置 AI 模型后，可用自然语言完成建客户/商机/报价单等全部操作。';
     }
     return delay({ reply, actions, generatedBy: 'rules' as const }, 500);
+  },
+};
+
+// ---------- 工作台聚合（Mock：由内存数据计算，与后端 /dashboard 同构） ----------
+export const dashboardApi = {
+  data: (scope: string, time: string): Promise<import('@/types').DashboardData> => {
+    const unit = (['day', 'week', 'month', 'quarter'].includes(time) ? time : 'month') as 'day' | 'week' | 'month' | 'quarter';
+    const start = dayjs().startOf(unit);
+    const prevStart = unit === 'quarter' ? start.subtract(3, 'month') : start.subtract(1, unit);
+    const deptIds = MOCK_USERS.filter((u) => u.depId === CURRENT_USER.depId).map((u) => u.userId);
+    const inScope = (leaderId?: number) =>
+      scope === 'company' ? true : scope === 'dept' ? deptIds.includes(leaderId ?? -1) : leaderId === CURRENT_USER.userId;
+    const inWin = (d: string | undefined, from: ReturnType<typeof dayjs>, to?: ReturnType<typeof dayjs>) =>
+      !!d && dayjs(d).isAfter(from) && (!to || dayjs(d).isBefore(to));
+
+    const fc = customers.filter((c) => c.active === 1 && inScope(c.leaderId));
+    const isLead = (c: Customer) => c.category <= 2 || c.currentTrackingStatus === 17;
+    const newLeads = fc.filter((c) => isLead(c) && inWin(c.createDate, start)).length;
+    const converted = fc.filter((c) => c.currentTrackingStatus === 17 && inWin(c.createDate, start)).length;
+    const fo = opportunities.filter((o) => o.active === 1 && inScope(o.leaderId));
+    const fct = contracts.filter((c) => c.status !== 5 && inScope(c.leaderId));
+
+    const byStage = new Map<number, number>();
+    fo.forEach((o) => byStage.set(o.status, (byStage.get(o.status) ?? 0) + 1));
+
+    return delay({
+      kpis: {
+        newLeads,
+        prevLeads: fc.filter((c) => isLead(c) && inWin(c.createDate, prevStart, start)).length,
+        newCustomers: fc.filter((c) => c.category >= 3 && inWin(c.createDate, start)).length,
+        prevCustomers: fc.filter((c) => c.category >= 3 && inWin(c.createDate, prevStart, start)).length,
+        oppCount: fo.length,
+        contractCount: fct.length,
+        contractAmount: fct.reduce((s, c) => s + Number(c.amount), 0),
+        receivedAmount: fct.reduce((s, c) => s + Number(c.receivedAmount), 0),
+        outstandingAmount: fct.reduce((s, c) => s + Number(c.outstandingAmount), 0),
+      },
+      funnel: [...byStage.entries()].map(([termId, count]) => ({ termId, count })),
+      conversion: { newLeads, converted, rate: newLeads > 0 ? Math.round((converted / newLeads) * 1000) / 10 : 0 },
+      pk: MOCK_USERS.map((u) => ({
+        name: u.name,
+        amount: contracts.filter((c) => c.status !== 5 && c.leaderId === u.userId).reduce((s, c) => s + Number(c.amount), 0),
+      })).sort((a, b) => b.amount - a.amount).slice(0, 6),
+      recentTrackings: trackings
+        .slice()
+        .sort((a, b) => b.createDate.localeCompare(a.createDate))
+        .slice(0, 6)
+        .map((t) => ({
+          by: userName(t.createBy) ?? '',
+          customerId: t.customerId,
+          customerName: customers.find((c) => c.customerId === t.customerId)?.name ?? '',
+          comment: t.comment ?? '',
+          priorityLevel: t.priorityLevel ?? 1,
+          at: t.createDate,
+        })),
+    });
   },
 };
 
