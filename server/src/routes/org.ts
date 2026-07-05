@@ -9,6 +9,20 @@ export const orgRouter = Router();
 // 组织/部门管理需 system.org 权限
 orgRouter.use(['/org', '/departments', '/departments/:id', '/users/:id/department'], requirePermission('system.org'));
 
+// 成员搜索（登录即可）：负责人/接收人等选人控件用，只回姓名与部门
+orgRouter.get('/users', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const kw = String(req.query.kw ?? '').trim();
+  const rows = await query<any>(
+    `SELECT u.user_id, u.name, d.name AS dep_name
+     FROM app_user u LEFT JOIN department d ON d.department_id = u.department_id
+     WHERE u.organization_id=$1 ${kw ? 'AND u.name ILIKE $2' : ''}
+     ORDER BY u.user_id LIMIT 20`,
+    kw ? [orgId, `%${kw}%`] : [orgId],
+  );
+  ok(res, rows.map((r: any) => ({ userId: Number(r.user_id), name: r.name, depName: r.dep_name ?? '' })));
+}));
+
 // 组织信息
 orgRouter.get('/org', ah(async (req, res) => {
   const { orgId } = ctx(req);

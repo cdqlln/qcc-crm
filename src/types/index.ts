@@ -86,6 +86,7 @@ export interface Customer {
   approval: ApprovalStatus;
   active: -1 | 0 | 1 | 2;
   createDate?: string;
+  customFields?: Record<string, string | number>; // 个性客户信息（field_id → 值）
 }
 
 export interface Contact {
@@ -151,6 +152,7 @@ export interface Opportunity {
   depId: number;
   competitor?: string;
   mainProduct?: string;
+  requirement?: string; // 客户需求描述
   renewType: 1 | 2;
   additional: 1 | 2;
   approval: ApprovalStatus;
@@ -559,3 +561,95 @@ export interface AiReportContent {
   suggestions: string[];
   actionItems: { id: string; text: string; done?: boolean }[];
 }
+
+// ---- 客户洞察（AI 模型生成；见 server/src/routes/insight.ts） ----
+export interface CustomerFacts {
+  customer: {
+    name: string; level: string; industry: string; groupName: string;
+    leader: string; source: string; createdAt: string; trackingNum: number; lastTrackingAt: string | null;
+  };
+  contacts: { name: string; position: string; isKey: boolean }[];
+  opportunities: {
+    name: string; amount: number; stage: string; stayDays: number; leader: string;
+    expectedDate: string | null; mainProduct: string; competitor: string;
+  }[];
+  trackings: { at: string; way: string; by: string; comment: string; nextAt: string | null }[];
+  contracts: {
+    name: string; amount: number; status: string; receivedAmount: number; outstandingAmount: number;
+    receivedRate: number; invoiceAmount: number; leader: string; beginDate: string | null; expiredDate: string | null;
+  }[];
+  overduePayments: { contractName: string; planDate: string; outstanding: number }[];
+  totals: {
+    oppCount: number; oppAmount: number;
+    contractCount: number; contractAmount: number;
+    receivedAmount: number; outstandingAmount: number; invoiceAmount: number; receivedRate: number;
+  };
+}
+
+export interface CustomerInsight {
+  summary: string;
+  healthScore: number;
+  owners: { role: string; name: string; note: string }[];
+  progress: { assessment: string; highlights: string[] };
+  finance: { assessment: string; highlights: string[] };
+  risks: string[];
+  nextSteps: string[];
+}
+
+export interface CustomerInsightReport {
+  reportId: number;
+  createdAt: string;
+  facts: CustomerFacts;
+  insight: CustomerInsight;
+  generatedBy: 'llm' | 'rules';
+  model?: string;
+}
+
+export interface AiIntegrationCfg {
+  enabled: boolean;
+  source: string; // db | env | none
+  provider: 'anthropic' | 'openai-compatible';
+  base: string;
+  model: string;
+  keyMasked: string;
+}
+
+// ---- AI 对话助手（工具调用执行 CRM 操作；见 server/src/routes/aiChat.ts） ----
+export interface AiChatAction {
+  type: 'customer' | 'opportunity' | 'quotation' | 'tracking' | 'contact';
+  label: string;
+  link?: string;
+}
+export interface AiChatResponse {
+  reply: string;
+  actions: AiChatAction[];
+  generatedBy: 'llm' | 'rules' | 'none';
+  model?: string;
+}
+
+// ---- 工作台聚合（真实统计；见 server/src/routes/dashboard.ts） ----
+export interface DashboardData {
+  kpis: {
+    newLeads: number; prevLeads: number;
+    newCustomers: number; prevCustomers: number;
+    oppCount: number;
+    contractCount: number; contractAmount: number; receivedAmount: number; outstandingAmount: number;
+  };
+  funnel: { termId: number; count: number }[];
+  conversion: { newLeads: number; converted: number; rate: number };
+  pk: { name: string; amount: number }[];
+  recentTrackings: { by: string; customerId: number; customerName: string; comment: string; priorityLevel: number; at: string }[];
+}
+
+// ---- 个性客户信息（租户自定义字段；见 server/src/routes/customFields.ts） ----
+export interface CustomFieldDef {
+  fieldId: number;
+  businessType: number; // 1客户
+  name: string;
+  fieldType: 'text' | 'number' | 'date' | 'select';
+  options: string[];
+  required: boolean;
+  order: number;
+  active: boolean;
+}
+export type CustomFieldValues = Record<string, string | number>;

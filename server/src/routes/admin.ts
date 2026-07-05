@@ -7,6 +7,7 @@ import { requirePermission } from '../auth.js';
 import { mapTerm } from '../mappers.js';
 import { getSetting, setSetting } from '../services/settings.js';
 import { fuzzySearch, getQccCfg } from '../services/qcc.js';
+import { chatComplete, getLlmCfg } from '../services/llm.js';
 
 export const adminRouter = Router();
 
@@ -122,6 +123,57 @@ adminRouter.post('/integrations/qcc/test', requirePermission('system.integration
   const list = await fuzzySearch(orgId, String(req.body?.keyword || '小米科技'));
   if (list === null) return fail(res, '调用失败：请检查凭据、账号额度或服务器出口 IP 是否境内');
   ok(res, { ok: true, sample: list.slice(0, 3).map((c) => c.name) });
+}));
+
+// ---------- 集成配置：AI 模型（客户洞察等 AI 能力；凭据仅存数据库） ----------
+adminRouter.get('/integrations/ai', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const cfg = await getLlmCfg(orgId);
+  const fromDb = !!(await getSetting(orgId, 'ai.key'));
+  ok(res, {
+    enabled: cfg.enabled,
+    source: fromDb ? 'db' : cfg.enabled ? 'env' : 'none',
+    provider: cfg.provider,
+    base: cfg.base,
+    model: cfg.model,
+    keyMasked: mask(cfg.key),
+  });
+}));
+
+const aiSchema = z.object({
+  provider: z.enum(['anthropic', 'openai-compatible']),
+  key: z.string().min(8),
+  model: z.string().min(1),
+  base: z.string().url().optional().or(z.literal('')),
+});
+adminRouter.put('/integrations/ai', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const d = aiSchema.parse(req.body);
+  if (d.provider === 'openai-compatible' && !d.base) return fail(res, 'OpenAI 兼容服务必须填写接口地址（Base URL）');
+  await setSetting(orgId, 'ai.provider', d.provider);
+  await setSetting(orgId, 'ai.key', d.key.trim());
+  await setSetting(orgId, 'ai.model', d.model.trim());
+  await setSetting(orgId, 'ai.base', d.base ? d.base.trim() : null);
+  ok(res, { ok: true });
+}));
+
+adminRouter.delete('/integrations/ai', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  for (const k of ['ai.provider', 'ai.key', 'ai.model', 'ai.base']) await setSetting(orgId, k, null);
+  ok(res, { ok: true });
+}));
+
+// 连通性测试：让模型回一句话，验证凭据/地址/模型名
+adminRouter.post('/integrations/ai/test', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const cfg = await getLlmCfg(orgId);
+  if (!cfg.enabled) return fail(res, '尚未配置 AI 模型（Key/模型名，OpenAI 兼容还需 Base URL）');
+  try {
+    const text = await chatComplete(cfg, '你是连通性测试助手，请用一句中文确认可用。', '收到请回复：连接正常。', 50);
+    ok(res, { ok: true, model: cfg.model, sample: text.trim().slice(0, 80) });
+  } catch (e) {
+    return fail(res, `连接失败：${e instanceof Error ? e.message : String(e)}`);
+  }
 }));
 
 // ---------- 日志审计（system.audit）----------

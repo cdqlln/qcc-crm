@@ -243,6 +243,59 @@ customersRouter.post(
   }),
 );
 
+// 客户信息编辑（创建后可改；负责人变更走「移交」审批流，不在此处）
+const updateSchema = z.object({
+  name: z.string().min(2).optional(),
+  level: z.coerce.number().int().positive().optional(),
+  source: z.coerce.number().int().positive().optional(),
+  industry: z.string().nullish(),
+  province: z.string().nullish(),
+  city: z.string().nullish(),
+  district: z.string().nullish(),
+  phoneName: z.string().nullish(),
+  phone: z.string().nullish(),
+  email: z.string().nullish(),
+  refCompanyId: z.string().nullish(),
+});
+
+customersRouter.put(
+  '/customers/:id',
+  ah(async (req, res) => {
+    const { orgId } = ctx(req);
+    const parsed = updateSchema.safeParse(req.body);
+    if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
+    const d = parsed.data;
+    // 数据范围：只能改自己可见范围内的客户
+    const scope = await dataScopeCond(req, 'leader_id');
+    const old = await one<any>(
+      `SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2 ${scope ? 'AND ' + scope : ''}`,
+      [req.params.id, orgId],
+    );
+    if (!old) return fail(res, '客户不存在或无权修改（非你可见范围内的客户）', 1, 404);
+
+    const row = await one<any>(
+      `UPDATE customer SET
+         name=COALESCE($1,name), level_term_id=COALESCE($2,level_term_id), source_term_id=COALESCE($3,source_term_id),
+         industry=COALESCE($4,industry), province=COALESCE($5,province), city=COALESCE($6,city), district=COALESCE($7,district),
+         phone_name=COALESCE($8,phone_name), phone=COALESCE($9,phone), email=COALESCE($10,email),
+         ref_company_id=COALESCE($11,ref_company_id)
+       WHERE customer_id=$12 RETURNING *`,
+      [d.name ?? null, d.level ?? null, d.source ?? null, d.industry ?? null, d.province ?? null, d.city ?? null,
+       d.district ?? null, d.phoneName ?? null, d.phone ?? null, d.email ?? null, d.refCompanyId ?? null, old.customer_id],
+    );
+    // 名称或企查查ID变化 → 重新按真实工商关系归集集团（无外部数据则保持独立，不臆造）
+    let groupId = row.group_id;
+    const nameChanged = d.name && d.name !== old.name;
+    const refChanged = d.refCompanyId && d.refCompanyId !== old.ref_company_id;
+    if (nameChanged || refChanged) {
+      await one(`UPDATE customer SET group_id=NULL WHERE customer_id=$1 RETURNING customer_id`, [row.customer_id]);
+      groupId = await autoAttachGroup(orgId, row.customer_id, row.name, row.ref_company_id);
+    }
+    const g = groupId ? await one<any>(`SELECT name FROM customer_group WHERE group_id=$1`, [groupId]) : null;
+    ok(res, mapCustomer({ ...row, group_id: groupId, group_name: g?.name }));
+  }),
+);
+
 const createSchema = z.object({
   name: z.string().min(2),
   level: z.coerce.number().int().positive(),

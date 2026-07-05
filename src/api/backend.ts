@@ -102,6 +102,7 @@ export const customersApi = {
   createTracking: (customerId: number, input: import('@/types').TrackingInput) =>
     post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
+  update: (id: number, input: Partial<Customer>) => put<Customer>(`/customers/${id}`, input),
   companySearch: (kw: string) =>
     get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }>(
       `/company-search?kw=${encodeURIComponent(kw)}`,
@@ -112,13 +113,15 @@ export const customersApi = {
     ),
   transfer: (customerId: number, toUserId: number, reason: string) =>
     post<{ status: number }>(`/customers/${customerId}/transfer`, { toUserId, reason }),
+  insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
+  generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),
 };
 
 export const opportunitiesApi = {
   list: (p: ListParams) => list<Opportunity>('/opportunities/list', p),
   get: (id: number) => get<Opportunity>(`/opportunities/${id}`),
   updateStage: (id: number, status: number) => put<Opportunity>(`/opportunities/${id}/stage`, { status }),
-  create: (input: Partial<Opportunity>) => post<Opportunity>('/opportunities', input),
+  create: (input: Partial<Opportunity> & { productIds?: number[] }) => post<Opportunity>('/opportunities', input),
 };
 
 export const quotationsApi = {
@@ -170,10 +173,31 @@ export const targetsApi = { list: () => get<Target[]>('/targets') };
 export const aiApi = {
   generate: (businessType: 0 | 1 | 2 | 3, businessId: number, stageId?: number) =>
     post<AiReport>('/ai/generate', { businessType, businessId, stageId }),
+  chat: (messages: { role: 'user' | 'assistant'; content: string }[]) =>
+    post<import('@/types').AiChatResponse>('/ai/chat', { messages }),
 };
 
 export const searchApi = {
   query: (kw: string) => get<SearchHit[]>(`/search?kw=${encodeURIComponent(kw)}`),
+};
+
+export const dashboardApi = {
+  data: (scope: string, time: string) => post<import('@/types').DashboardData>('/dashboard', { scope, time }),
+};
+
+export const usersApi = {
+  search: (kw?: string) => get<{ userId: number; name: string; depName: string }[]>(`/users${kw ? `?kw=${encodeURIComponent(kw)}` : ''}`),
+};
+
+export const customFieldsApi = {
+  defs: (all?: boolean) => get<import('@/types').CustomFieldDef[]>(`/custom-fields?businessType=1${all ? '&all=1' : ''}`),
+  create: (input: { name: string; fieldType: string; options?: string[]; required?: boolean; order?: number }) =>
+    post<{ fieldId: number }>('/custom-fields', { businessType: 1, ...input }),
+  update: (id: number, input: { name?: string; options?: string[]; required?: boolean; order?: number; active?: boolean }) =>
+    put(`/custom-fields/${id}`, input),
+  remove: (id: number) => req(`/custom-fields/${id}`, { method: 'DELETE' }),
+  saveValues: (customerId: number, values: import('@/types').CustomFieldValues) =>
+    put<{ customFields: import('@/types').CustomFieldValues }>(`/customers/${customerId}/custom-fields`, { values }),
 };
 
 // 附件上传（multipart；不手动设 Content-Type，由浏览器带 boundary）
@@ -244,6 +268,11 @@ export const integrationsApi = {
   saveQcc: (input: { key: string; secret: string; base?: string }) => put('/integrations/qcc', input),
   clearQcc: () => req('/integrations/qcc', { method: 'DELETE' }),
   testQcc: (keyword?: string) => post<{ ok: boolean; sample: string[] }>('/integrations/qcc/test', { keyword }),
+  ai: () => get<import('@/types').AiIntegrationCfg>('/integrations/ai'),
+  saveAi: (input: { provider: 'anthropic' | 'openai-compatible'; key: string; model: string; base?: string }) =>
+    put('/integrations/ai', input),
+  clearAi: () => req('/integrations/ai', { method: 'DELETE' }),
+  testAi: () => post<{ ok: boolean; model: string; sample: string }>('/integrations/ai/test'),
 };
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),

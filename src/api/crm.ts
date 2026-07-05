@@ -26,6 +26,8 @@ export const tasksApi = USE_API ? backend.tasksApi : mock.tasksApi;
 export const targetsApi = USE_API ? backend.targetsApi : mock.targetsApi;
 export const aiApi = USE_API ? backend.aiApi : mock.aiApi;
 export const searchApi = USE_API ? backend.searchApi : mock.searchApi;
+export const dashboardApi = USE_API ? backend.dashboardApi : mock.dashboardApi;
+export const usersApi = USE_API ? backend.usersApi : mock.usersApi;
 export const uploadApi = USE_API ? backend.uploadApi : mock.uploadApi;
 export const assetUrl = backend.assetUrl;
 
@@ -39,6 +41,7 @@ export const orgApi = USE_API ? backend.orgApi : mockOrg.orgApi;
 export const dictApi = USE_API ? backend.dictApi : mockAdmin.dictApi;
 export const auditApi = USE_API ? backend.auditApi : mockAdmin.auditApi;
 export const integrationsApi = USE_API ? backend.integrationsApi : mockAdmin.integrationsApi;
+export const customFieldsApi = USE_API ? backend.customFieldsApi : mockAdmin.customFieldsApi;
 export const groupsApi = USE_API ? backend.groupsApi : mockGroups.groupsApi;
 
 // 分析页/弹窗就地聚合使用的内存数据集（始终来自 mock；接入后端后分析页可改为聚合接口）

@@ -36,6 +36,7 @@ export const mapCustomer = (r: any) => ({
   approval: r.approval,
   active: r.active,
   createDate: r.created_at,
+  customFields: r.custom_fields ?? {},
 });
 
 export const mapContact = (r: any) => ({
@@ -86,6 +87,7 @@ export const mapOpportunity = (r: any) => ({
   depId: r.department_id,
   competitor: r.competitor,
   mainProduct: r.main_product,
+  requirement: r.requirement,
   renewType: r.renew_type,
   additional: r.additional,
   approval: r.approval,
