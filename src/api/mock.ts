@@ -473,20 +473,55 @@ export const quotationsApi = {
 };
 
 // ---------- 合同 §6.6 ----------
+// 合同法务审核留痕（Mock 内存）
+const contractReviews: import('@/types').ContractReview[] = [];
+let reviewSeq = 9000;
+function pushReview(contractId: number, action: 1 | 2 | 3 | 4, comment: string): import('@/types').ContractReview {
+  const row: import('@/types').ContractReview = {
+    reviewId: ++reviewSeq, contractId, action, comment, attachments: [],
+    createBy: 1, createByName: userName(1) ?? '我', createDate: dayjs().toISOString(),
+  };
+  contractReviews.push(row);
+  return row;
+}
+
 export const contractsApi = {
   list: (p: ListParams) => {
     const tab = p.tab ?? 'all';
     let src = contracts;
     if (tab === 'archived') src = src.filter((c) => c.archive);
     if (tab === 'renew') src = src.filter((c) => c.renewType === 2);
+    if (tab === 'review') src = src.filter((c) => (c.reviewStatus ?? 0) === 1);
     return paginate(src, p, ['name', 'code', 'customerName']);
   },
   get: (id: number) => delay(contracts.find((c) => c.contractId === id)),
+  // ---- 法务审核 + 协同（内存留痕，与后端同状态机） ----
+  reviews: (contractId: number) => delay(contractReviews.filter((r) => r.contractId === contractId)),
+  submitReview: (contractId: number, comment?: string) => {
+    const ct = contracts.find((c) => c.contractId === contractId);
+    if (!ct) return Promise.reject(new Error('合同不存在'));
+    if ((ct.reviewStatus ?? 0) === 1) return Promise.reject(new Error('已在法务审核中，请勿重复提交'));
+    if (ct.reviewStatus === 2) return Promise.reject(new Error('该合同已审核通过'));
+    ct.reviewStatus = 1;
+    pushReview(contractId, 1, comment || '提交法务审核');
+    return delay({ reviewStatus: 1 });
+  },
+  review: (contractId: number, pass: boolean, comment: string) => {
+    const ct = contracts.find((c) => c.contractId === contractId);
+    if (!ct) return Promise.reject(new Error('合同不存在'));
+    if ((ct.reviewStatus ?? 0) !== 1) return Promise.reject(new Error('当前状态不能审核'));
+    if (!pass && !comment.trim()) return Promise.reject(new Error('驳回必须填写审核意见，便于销售修改'));
+    ct.reviewStatus = pass ? 2 : 3;
+    pushReview(contractId, pass ? 2 : 3, comment || (pass ? '审核通过' : ''));
+    return delay({ reviewStatus: ct.reviewStatus });
+  },
+  reviewComment: (contractId: number, comment: string) => delay(pushReview(contractId, 4, comment)),
   payments: (contractId: number) => delay(payments.filter((p) => p.contractId === contractId)),
   paymentSheets: (contractId: number) => delay(paymentSheets.filter((s) => s.contractId === contractId)),
   invoices: (contractId: number) => delay(invoices.filter((i) => i.contractId === contractId)),
   createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) => {
     const ct = contracts.find((c) => c.contractId === contractId) as any;
+    if ((ct?.reviewStatus ?? 0) !== 2) return Promise.reject(new Error('合同尚未通过法务审核，暂不能开票（请在合同详情提交法务审核）'));
     const title = customers.find((c) => c.customerId === (input.titleCustomerId ?? ct?.customerId));
     const iid = invoices.reduce((m, i) => Math.max(m, i.invoiceId), 0) + 1;
     const noTax = (Number(input.amount) / 1.06).toFixed(2);

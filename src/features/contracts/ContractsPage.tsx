@@ -20,6 +20,7 @@ import type { Contract } from '@/types';
 
 const TABS = [
   { key: 'all', label: '全部' },
+  { key: 'review', label: '待法务审核' },
   { key: 'archived', label: '已归档' },
   { key: 'renew', label: '待续约' },
 ];

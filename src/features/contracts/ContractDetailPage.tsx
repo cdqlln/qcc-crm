@@ -13,6 +13,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Timeline } from '@/components/ui/Timeline';
 import { AiPanel } from '@/components/ai/AiPanel';
+import { ContractReviewTab, REVIEW_STATUS } from './ContractReviewTab';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field, Select, TextInput } from '@/components/ui/form';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
@@ -56,6 +57,7 @@ export function ContractDetailPage() {
 
   const TABS = [
     { key: 'overview', label: '概览' },
+    { key: 'review', label: '法务审核' },
     { key: 'payments', label: '回款计划', count: payments.length },
     { key: 'invoices', label: '发票', count: invoices.length },
     { key: 'renewal', label: '续约' },
@@ -89,6 +91,7 @@ export function ContractDetailPage() {
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold text-text">{c.name}</h1>
               <StatusTag {...C_STATUS[c.status]} />
+              <StatusTag {...REVIEW_STATUS[c.reviewStatus ?? 0]} />
               <ApprovalBadge approval={c.approval} />
             </div>
             <div className="mt-1 text-sm text-text-weak">{c.code} · {c.customerName} · 负责人 {userName(c.leaderId)}</div>
@@ -140,6 +143,7 @@ export function ContractDetailPage() {
               ]}
             />
           )}
+          {tab === 'review' && <ContractReviewTab contract={c} />}
           {tab === 'payments' && <DataTable columns={paymentCols} data={payments} rowKey={(r) => r.paymentId} />}
           {tab === 'invoices' && <DataTable columns={invoiceCols} data={invoices} rowKey={(r) => r.invoiceId} />}
           {tab === 'renewal' && (

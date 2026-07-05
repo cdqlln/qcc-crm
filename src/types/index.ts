@@ -250,8 +250,21 @@ export interface Contract {
   labels?: number[];
   approval: ApprovalStatus;
   changeApproval: ApprovalStatus;
+  reviewStatus?: 0 | 1 | 2 | 3; // 法务审核：0未送审 1待审核 2通过 3驳回
   archive: boolean;
   leaderId?: number;
+}
+
+/** 合同法务审核记录（送审/通过/驳回/协同留言） */
+export interface ContractReview {
+  reviewId: number;
+  contractId: number;
+  action: 1 | 2 | 3 | 4; // 1送审 2通过 3驳回 4协同留言
+  comment: string;
+  attachments: { name: string; url: string }[];
+  createBy?: number;
+  createByName: string;
+  createDate: string;
 }
 
 /** payment 回款计划 */

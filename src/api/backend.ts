@@ -147,6 +147,13 @@ export const contractsApi = {
   create: (input: Record<string, unknown>) => post<Contract>('/contracts', input),
   createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) =>
     post<Invoice>(`/contracts/${contractId}/invoices`, input),
+  reviews: (contractId: number) => get<import('@/types').ContractReview[]>(`/contracts/${contractId}/reviews`),
+  submitReview: (contractId: number, comment?: string) =>
+    post<{ reviewStatus: number }>(`/contracts/${contractId}/submit-review`, { comment }),
+  review: (contractId: number, pass: boolean, comment: string) =>
+    post<{ reviewStatus: number }>(`/contracts/${contractId}/review`, { pass, comment }),
+  reviewComment: (contractId: number, comment: string) =>
+    post<import('@/types').ContractReview>(`/contracts/${contractId}/review-comments`, { comment }),
 };
 
 export const paymentsApi = {
