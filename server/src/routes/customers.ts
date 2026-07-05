@@ -146,6 +146,11 @@ customersRouter.get(
        FROM (
          SELECT 'customer' kind, '新增客户' title, name summary, created_by op, created_at at FROM customer WHERE customer_id=$1
          UNION ALL
+         SELECT 'lead','线索转化',
+                '由线索转化而来' || COALESCE('（来源：' || NULLIF(lead_snapshot->>'sourceName','') || '）',''),
+                converted_by, converted_at
+         FROM customer WHERE customer_id=$1 AND converted_at IS NOT NULL
+         UNION ALL
          SELECT 'tracking','跟进记录', left(comment, 50), created_by, created_at FROM customer_tracking WHERE customer_id=$1
          UNION ALL
          SELECT 'opportunity','新增商机', name || ' · 预计 ¥' || estimated_amount::text, leader_id, created_at FROM opportunity WHERE customer_id=$1

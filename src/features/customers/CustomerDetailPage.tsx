@@ -31,6 +31,7 @@ import { CustomerInsightPanel } from '@/components/ai/CustomerInsightPanel';
 import { CustomFieldsSection } from './CustomFieldsSection';
 import { EditCustomerDialog } from './EditCustomerDialog';
 import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
+import { LeadOriginDialog } from './LeadOriginDialog';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -49,6 +50,7 @@ export function CustomerDetailPage() {
   const [tab, setTab] = useState('overview');
   const [transferOpen, setTransferOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [leadOriginOpen, setLeadOriginOpen] = useState(false);
   const term = useTerm();
 
   const { data: cust, isLoading } = useQuery({ queryKey: ['customer', cid], queryFn: () => customersApi.get(cid) });
@@ -87,6 +89,11 @@ export function CustomerDetailPage() {
                 <h1 className="text-xl font-semibold text-text">{cust.name}</h1>
                 <TermTag id={cust.level} dot={false} />
                 <TermTag id={cust.currentTrackingStatus} />
+                {cust.convertedAt && (
+                  <button onClick={() => setLeadOriginOpen(true)} title="由线索转化而来，点击查看原线索">
+                    <StatusTag kind="info" label="线索转化 ↗" />
+                  </button>
+                )}
               </div>
               <div className="mt-1.5 flex flex-wrap items-center gap-3 text-sm text-text-weak">
                 <span className="inline-flex items-center gap-1"><Building2 size={13} />{cust.industry}</span>
@@ -185,7 +192,7 @@ export function CustomerDetailPage() {
               <div className="text-sm text-text-weak">风险监控（customer_risk_monitor）：经营异常 0 项 · 司法案件 1 项 · 行政处罚 0 项</div>
             </div>
           )}
-          {tab === 'dynamic' && <ActivityTab customerId={cid} />}
+          {tab === 'dynamic' && <ActivityTab customerId={cid} onViewLead={cust.convertedAt ? () => setLeadOriginOpen(true) : undefined} />}
           {tab === 'ai' && (
             <div className="-m-5 h-[560px]">
               <AiPanel businessType={1} businessId={cid} />
@@ -198,6 +205,7 @@ export function CustomerDetailPage() {
         <TransferDialog customerId={cid} currentLeaderId={cust.leaderId} onClose={() => setTransferOpen(false)} />
       )}
       {editOpen && <EditCustomerDialog cust={cust} onClose={() => setEditOpen(false)} />}
+      {leadOriginOpen && <LeadOriginDialog cust={cust} onClose={() => setLeadOriginOpen(false)} />}
     </div>
   );
 }
@@ -235,9 +243,9 @@ function TransferDialog({ customerId, currentLeaderId, onClose }: { customerId: 
 }
 
 const ACT_KIND: Record<string, 'info' | 'success' | 'warning' | 'danger' | 'neutral'> = {
-  customer: 'neutral', tracking: 'info', opportunity: 'warning', quotation: 'info', contract: 'success', invoice: 'success',
+  customer: 'neutral', lead: 'warning', tracking: 'info', opportunity: 'warning', quotation: 'info', contract: 'success', invoice: 'success',
 };
-function ActivityTab({ customerId }: { customerId: number }) {
+function ActivityTab({ customerId, onViewLead }: { customerId: number; onViewLead?: () => void }) {
   const { data = [], isLoading } = useQuery({ queryKey: ['activities', customerId], queryFn: () => customersApi.activities(customerId) });
   if (isLoading) return <TableSkeleton rows={5} cols={1} />;
   if (data.length === 0) return <EmptyState title="暂无动态" description="客户的新增线索/商机/报价/合同/开票等行为将在此汇总" />;
@@ -248,7 +256,14 @@ function ActivityTab({ customerId }: { customerId: number }) {
         kind: ACT_KIND[a.kind] ?? 'neutral',
         title: a.title,
         meta: `${a.operator ?? '系统'} · ${formatDate(a.date, 'YYYY-MM-DD HH:mm')}`,
-        body: a.summary,
+        body: a.kind === 'lead' ? (
+          <span>
+            {a.summary}
+            {onViewLead && (
+              <button onClick={onViewLead} className="ml-2 text-xs text-primary underline-offset-2 hover:underline">查看原线索</button>
+            )}
+          </span>
+        ) : a.summary,
       }))}
     />
   );

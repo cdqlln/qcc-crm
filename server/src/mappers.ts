@@ -37,6 +37,9 @@ export const mapCustomer = (r: any) => ({
   active: r.active,
   createDate: r.created_at,
   customFields: r.custom_fields ?? {},
+  convertedAt: r.converted_at,
+  convertedBy: r.converted_by,
+  leadSnapshot: r.lead_snapshot ?? undefined,
 });
 
 export const mapContact = (r: any) => ({

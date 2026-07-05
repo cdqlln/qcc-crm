@@ -56,19 +56,38 @@ export const uploadApi = {
 };
 
 // ---------- 线索 §6.2 ----------
+// 转化留痕：固化转化那一刻的线索原貌（客户侧「查看原线索」）
+const tName2 = (id?: number | null) => MOCK_TERMS.find((t) => t.termId === id)?.name ?? '';
+function markConverted(c: Customer) {
+  if (c.convertedAt) return;
+  c.convertedAt = dayjs().toISOString();
+  c.convertedBy = 1;
+  c.leadSnapshot = {
+    name: c.name, sourceName: tName2(c.source), poolGroupName: tName2(c.poolGroup),
+    industry: c.industry ?? '', region: `${c.province ?? ''}${c.city ?? ''}`,
+    phoneName: c.phoneName ?? '', phone: c.phone ?? '', leaderName: userName(c.leaderId) ?? '',
+    trackingNum: c.trackingNum ?? 0, createdAt: c.createDate, claimAt: c.claimAt, assignAt: c.assignAt,
+    utmSource: c.utmSource, utmMedium: c.utmMedium, utmCampaign: c.utmCampaign,
+  };
+}
+
 export const leadsApi = {
   list: (p: ListParams) => {
     const tab = p.tab ?? 'all';
-    let src = customers.filter((c) => c.category === 1 || c.category === 2);
+    // 已转化线索已成为客户，按转化留痕检索
+    let src = tab === 'converted'
+      ? customers.filter((c) => !!c.convertedAt)
+      : customers.filter((c) => c.category === 1 || c.category === 2);
     if (tab === 'pool') src = src.filter((c) => c.category === 2);
     if (tab === 'mine') src = src.filter((c) => c.category === 1);
-    if (tab === 'converted') src = src.filter((c) => c.currentTrackingStatus === 17);
     return paginate(src, p, ['name', 'phoneName', 'industry']);
   },
   get: (id: number) => delay(customers.find((c) => c.customerId === id)),
   convert: (id: number) => {
     const c = customers.find((x) => x.customerId === id);
     if (c) {
+      if (c.category > 2) return Promise.reject(new Error('该记录已是客户，无需再次转化'));
+      markConverted(c);
       c.category = 3;
       c.currentTrackingStatus = 8;
     }
@@ -124,7 +143,10 @@ export const leadsApi = {
   },
   toOpportunity: (id: number, input?: { name?: string; estimatedAmount?: string }) => {
     const c = customers.find((x) => x.customerId === id);
-    if (c) { c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1; }
+    if (c) {
+      if (c.category <= 2) markConverted(c); // 首次从线索侧转化时留痕
+      c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1;
+    }
     const oid = opportunities.reduce((m, o) => Math.max(m, o.opportunityId), 0) + 1;
     const code = `OPP${dayjs().format('YYYY')}${String(oid).padStart(4, '0')}`;
     opportunities.unshift({
@@ -289,6 +311,12 @@ export const customersApi = {
     const ev: { kind: string; title: string; summary: string; operator?: string; date: string }[] = [];
     const c = customers.find((x) => x.customerId === customerId);
     if (c) ev.push({ kind: 'customer', title: '新增客户', summary: c.name, operator: userName(c.leaderId), date: c.createDate ?? dayjs().toISOString() });
+    if (c?.convertedAt)
+      ev.push({
+        kind: 'lead', title: '线索转化',
+        summary: `由线索转化而来${c.leadSnapshot?.sourceName ? `（来源：${c.leadSnapshot.sourceName}）` : ''}`,
+        operator: userName(c.convertedBy), date: c.convertedAt,
+      });
     for (const t of trackings.filter((x) => x.customerId === customerId))
       ev.push({ kind: 'tracking', title: '跟进记录', summary: (t.comment ?? '').slice(0, 50), operator: userName(t.createBy), date: t.createDate });
     for (const o of opportunities.filter((x) => x.customerId === customerId))

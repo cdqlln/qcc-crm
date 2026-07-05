@@ -87,6 +87,28 @@ export interface Customer {
   active: -1 | 0 | 1 | 2;
   createDate?: string;
   customFields?: Record<string, string | number>; // 个性客户信息（field_id → 值）
+  convertedAt?: string; // 线索转化时间（有值=由线索转化而来）
+  convertedBy?: number;
+  leadSnapshot?: LeadSnapshot; // 转化那一刻的线索原貌
+}
+
+/** 线索转化留痕快照 */
+export interface LeadSnapshot {
+  name: string;
+  sourceName: string;
+  poolGroupName: string;
+  industry: string;
+  region: string;
+  phoneName: string;
+  phone: string;
+  leaderName: string;
+  trackingNum: number;
+  createdAt?: string;
+  claimAt?: string;
+  assignAt?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
 }
 
 export interface Contact {
