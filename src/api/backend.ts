@@ -102,6 +102,7 @@ export const customersApi = {
   createTracking: (customerId: number, input: import('@/types').TrackingInput) =>
     post<Tracking>(`/customers/${customerId}/trackings`, input),
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
+  update: (id: number, input: Partial<Customer>) => put<Customer>(`/customers/${id}`, input),
   companySearch: (kw: string) =>
     get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }>(
       `/company-search?kw=${encodeURIComponent(kw)}`,

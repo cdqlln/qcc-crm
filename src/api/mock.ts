@@ -330,6 +330,13 @@ export const customersApi = {
     return delay(Object.values(byProduct));
   },
   transfer: (_customerId: number, _toUserId: number, _reason: string) => delay({ status: 2 }),
+  update: (id: number, input: Partial<Customer>) => {
+    const c = customers.find((x) => x.customerId === id);
+    if (!c) return Promise.reject(new Error('客户不存在'));
+    const { customerId: _cid, leaderId: _lid, category: _cat, active: _act, ...rest } = input;
+    Object.assign(c, Object.fromEntries(Object.entries(rest).filter(([, v]) => v !== undefined)));
+    return delay({ ...c });
+  },
   // 客户洞察（Mock 无真实模型 → 规则版，generatedBy:'rules'；真实 AI 需后端配置模型）
   insight: (customerId: number) => delay(insightStore.get(customerId) ?? null),
   generateInsight: (customerId: number) => {

@@ -30,6 +30,7 @@ import { StatusTag } from '@/components/ui/StatusTag';
 import { AiPanel } from '@/components/ai/AiPanel';
 import { CustomerInsightPanel } from '@/components/ai/CustomerInsightPanel';
 import { CustomFieldsSection } from './CustomFieldsSection';
+import { EditCustomerDialog } from './EditCustomerDialog';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -47,6 +48,7 @@ export function CustomerDetailPage() {
   const openCreate = useCreate((s) => s.open);
   const [tab, setTab] = useState('overview');
   const [transferOpen, setTransferOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const term = useTerm();
 
   const { data: cust, isLoading } = useQuery({ queryKey: ['customer', cid], queryFn: () => customersApi.get(cid) });
@@ -95,6 +97,7 @@ export function CustomerDetailPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button onClick={() => setEditOpen(true)}><Pencil size={14} />编辑</Button>
             <Button onClick={() => toast('已打开新增跟进', 'info')}><CalendarPlus size={14} />加跟进</Button>
             <Button onClick={() => openCreate('opportunity', { customerId: cid })}><PlusCircle size={14} />建商机</Button>
             <Button onClick={() => navigate('/quotations/new')}><FilePlus2 size={14} />建报价</Button>
@@ -194,6 +197,7 @@ export function CustomerDetailPage() {
       {transferOpen && (
         <TransferDialog customerId={cid} currentLeaderId={cust.leaderId} onClose={() => setTransferOpen(false)} />
       )}
+      {editOpen && <EditCustomerDialog cust={cust} onClose={() => setEditOpen(false)} />}
     </div>
   );
 }
