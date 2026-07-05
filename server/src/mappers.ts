@@ -37,6 +37,9 @@ export const mapCustomer = (r: any) => ({
   active: r.active,
   createDate: r.created_at,
   customFields: r.custom_fields ?? {},
+  convertedAt: r.converted_at,
+  convertedBy: r.converted_by,
+  leadSnapshot: r.lead_snapshot ?? undefined,
 });
 
 export const mapContact = (r: any) => ({
@@ -142,6 +145,7 @@ export const mapQuotationProduct = (r: any) => ({
   totalPrice: r.total_price,
   cost: r.cost,
   pricingMode: r.pricing_mode,
+  apiItems: r.api_items ?? undefined, // 数据API接口报价清单
 });
 
 export const mapContract = (r: any) => ({
@@ -171,6 +175,7 @@ export const mapContract = (r: any) => ({
   labels: r.labels ?? [],
   approval: r.approval,
   changeApproval: r.change_approval,
+  reviewStatus: r.review_status ?? 0,
   archive: r.archive,
   leaderId: r.leader_id,
 });

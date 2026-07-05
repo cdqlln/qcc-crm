@@ -23,9 +23,10 @@ const TYPE_LABEL: Record<number, string> = {
   51: '掉保线索',
   60: '回款计划',
   70: '商机阶段超时',
+  80: '合同法务审核',
 };
 const TYPE_KIND: Record<number, 'info' | 'success' | 'warning' | 'danger' | 'neutral'> = {
-  10: 'info', 20: 'success', 30: 'warning', 40: 'info', 50: 'danger', 51: 'danger', 60: 'warning', 70: 'danger',
+  10: 'info', 20: 'success', 30: 'warning', 40: 'info', 50: 'danger', 51: 'danger', 60: 'warning', 70: 'danger', 80: 'warning',
 };
 
 export function TasksPage() {

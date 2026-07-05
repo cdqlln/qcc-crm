@@ -8,7 +8,7 @@ const PERMS: PermissionItem[] = [
   ['customer.view', '客户-查看', '客户'], ['customer.edit', '客户-编辑', '客户'], ['customer.transfer', '客户-移交', '客户'], ['customer.export', '客户-导出', '客户'], ['customer.delete', '客户-删除/退公海', '客户'],
   ['opportunity.view', '商机-查看', '商机'], ['opportunity.edit', '商机-编辑', '商机'],
   ['quotation.view', '报价-查看', '报价'], ['quotation.edit', '报价-编辑', '报价'], ['quotation.approve', '报价/单据-审批', '审批'],
-  ['contract.view', '合同-查看', '合同'], ['contract.edit', '合同-编辑', '合同'], ['finance.view', '资金-查看', '资金'],
+  ['contract.view', '合同-查看', '合同'], ['contract.edit', '合同-编辑', '合同'], ['contract.review', '合同-法务审核', '合同'], ['finance.view', '资金-查看', '资金'],
   ['system.org', '系统-组织/部门', '系统'], ['system.role', '系统-角色权限', '系统'], ['system.dict', '系统-字段/字典', '系统'], ['system.audit', '系统-日志审计', '系统'],
 ].map(([code, name, module], i) => ({ permissionId: i + 1, code, name, module, type: code.startsWith('system') || code.includes('delete') || code.includes('approve') ? 20 : 10 }));
 
@@ -17,6 +17,7 @@ const roles: Role[] = [
   { roleId: 1, name: '销售员', scope: 1, permissions: ['lead.view', 'lead.edit', 'lead.assign', 'lead.export', 'customer.view', 'customer.edit', 'opportunity.view', 'opportunity.edit', 'quotation.view', 'quotation.edit', 'contract.view', 'finance.view'], userCount: 5 },
   { roleId: 2, name: '销售主管', scope: 3, permissions: allCodes.filter((c) => !c.startsWith('system')), userCount: 3 },
   { roleId: 3, name: '管理员', scope: 4, permissions: allCodes, userCount: 1 },
+  { roleId: 4, name: '法务', scope: 4, permissions: ['contract.view', 'contract.review', 'customer.view', 'quotation.view'], userCount: 0 },
 ];
 const SCOPE: Record<number, string> = { 1: '本人', 2: '本部门', 3: '本部门及下属', 4: '全公司' };
 const userRoleMap: Record<number, number[]> = { 1: [3], 2: [1], 3: [1], 4: [2], 5: [1], 6: [2], 7: [1], 8: [1] };

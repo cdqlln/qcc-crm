@@ -87,6 +87,28 @@ export interface Customer {
   active: -1 | 0 | 1 | 2;
   createDate?: string;
   customFields?: Record<string, string | number>; // 个性客户信息（field_id → 值）
+  convertedAt?: string; // 线索转化时间（有值=由线索转化而来）
+  convertedBy?: number;
+  leadSnapshot?: LeadSnapshot; // 转化那一刻的线索原貌
+}
+
+/** 线索转化留痕快照 */
+export interface LeadSnapshot {
+  name: string;
+  sourceName: string;
+  poolGroupName: string;
+  industry: string;
+  region: string;
+  phoneName: string;
+  phone: string;
+  leaderName: string;
+  trackingNum: number;
+  createdAt?: string;
+  claimAt?: string;
+  assignAt?: string;
+  utmSource?: string;
+  utmMedium?: string;
+  utmCampaign?: string;
 }
 
 export interface Contact {
@@ -221,6 +243,7 @@ export interface QuotationProduct {
   totalPrice: string; // 小计（按用量行为 0）
   cost: string;
   pricingMode?: 'qty' | 'usage'; // qty按数量 usage按用量(API接口单价,框架)
+  apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（按量行，选自价目表）
 }
 
 export interface Contract {
@@ -250,8 +273,21 @@ export interface Contract {
   labels?: number[];
   approval: ApprovalStatus;
   changeApproval: ApprovalStatus;
+  reviewStatus?: 0 | 1 | 2 | 3; // 法务审核：0未送审 1待审核 2通过 3驳回
   archive: boolean;
   leaderId?: number;
+}
+
+/** 合同法务审核记录（送审/通过/驳回/协同留言） */
+export interface ContractReview {
+  reviewId: number;
+  contractId: number;
+  action: 1 | 2 | 3 | 4; // 1送审 2通过 3驳回 4协同留言
+  comment: string;
+  attachments: { name: string; url: string }[];
+  createBy?: number;
+  createByName: string;
+  createDate: string;
 }
 
 /** payment 回款计划 */
@@ -653,3 +689,26 @@ export interface CustomFieldDef {
   active: boolean;
 }
 export type CustomFieldValues = Record<string, string | number>;
+
+// ---- 开放平台·数据产品价目表（数据API套餐 接口级报价；见 server/src/routes/apiPrices.ts） ----
+export interface ApiPrice {
+  apiPriceId: number;
+  category: string;
+  apiCode: string;
+  name: string;
+  apiType: string;
+  price: number;
+  unit: string;
+  remark: string;
+  active: boolean;
+  order: number;
+}
+/** 报价单按量行挂载的接口报价清单条目 */
+export interface ApiQuoteItem {
+  apiCode: string;
+  name: string;
+  price: number;      // 标准单价
+  quotePrice: number; // 报价单价（可折）
+  estCalls: number;   // 预估月调用量（框架可为 0）
+  unit: string;
+}

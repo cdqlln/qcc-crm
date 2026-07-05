@@ -147,6 +147,13 @@ export const contractsApi = {
   create: (input: Record<string, unknown>) => post<Contract>('/contracts', input),
   createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) =>
     post<Invoice>(`/contracts/${contractId}/invoices`, input),
+  reviews: (contractId: number) => get<import('@/types').ContractReview[]>(`/contracts/${contractId}/reviews`),
+  submitReview: (contractId: number, comment?: string) =>
+    post<{ reviewStatus: number }>(`/contracts/${contractId}/submit-review`, { comment }),
+  review: (contractId: number, pass: boolean, comment: string) =>
+    post<{ reviewStatus: number }>(`/contracts/${contractId}/review`, { pass, comment }),
+  reviewComment: (contractId: number, comment: string) =>
+    post<import('@/types').ContractReview>(`/contracts/${contractId}/review-comments`, { comment }),
 };
 
 export const paymentsApi = {
@@ -183,6 +190,16 @@ export const searchApi = {
 
 export const dashboardApi = {
   data: (scope: string, time: string) => post<import('@/types').DashboardData>('/dashboard', { scope, time }),
+};
+
+export const apiPricesApi = {
+  list: (kw?: string, category?: string, all?: boolean) =>
+    get<import('@/types').ApiPrice[]>(
+      `/api-prices?${new URLSearchParams({ ...(kw ? { kw } : {}), ...(category ? { category } : {}), ...(all ? { all: '1' } : {}) })}`,
+    ),
+  create: (input: Partial<import('@/types').ApiPrice>) => post<{ apiPriceId: number }>('/api-prices', input),
+  update: (id: number, input: Partial<import('@/types').ApiPrice>) => put(`/api-prices/${id}`, input),
+  remove: (id: number) => req(`/api-prices/${id}`, { method: 'DELETE' }),
 };
 
 export const usersApi = {

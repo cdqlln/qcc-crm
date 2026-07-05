@@ -4,7 +4,7 @@ import { one, query } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapContract, mapInvoice, mapPayment } from '../mappers.js';
-import { dataScopeCond } from '../auth.js';
+import { dataScopeCond, requirePermission } from '../auth.js';
 
 export const contractsRouter = Router();
 
@@ -28,6 +28,7 @@ contractsRouter.post(
     const conds = ['ct.organization_id = $1'];
     if (body.tab === 'archived') conds.push('ct.archive = true');
     else if (body.tab === 'renew') conds.push('ct.renew_type = 2');
+    else if (body.tab === 'review') conds.push('ct.review_status = 1'); // 法务待审核队列
     const scope = await dataScopeCond(req, 'ct.leader_id');
     if (scope) conds.push(scope);
 
@@ -89,6 +90,111 @@ contractsRouter.get(
   }),
 );
 
+// ---------- 法务审核 + 销售协同 ----------
+const REVIEW_LABEL: Record<number, string> = { 0: '未送审', 1: '待法务审核', 2: '审核通过', 3: '已驳回' };
+
+const mapReview = (r: any) => ({
+  reviewId: Number(r.review_id),
+  contractId: Number(r.contract_id),
+  action: r.action, // 1送审 2通过 3驳回 4协同留言
+  comment: r.comment ?? '',
+  attachments: r.attachments ?? [],
+  createBy: r.created_by,
+  createByName: r.create_by_name ?? '',
+  createDate: r.created_at,
+});
+
+// 审核过程时间线（送审/通过/驳回/留言）
+contractsRouter.get('/contracts/:id/reviews', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const rows = await query(
+    `SELECT r.*, u.name AS create_by_name FROM contract_review r
+     LEFT JOIN app_user u ON u.user_id = r.created_by
+     WHERE r.contract_id=$1 AND r.organization_id=$2 ORDER BY r.review_id`,
+    [req.params.id, orgId],
+  );
+  ok(res, rows.map(mapReview));
+}));
+
+// 提交法务审核（销售）：未送审/被驳回后可（重新）送审
+contractsRouter.post('/contracts/:id/submit-review', ah(async (req, res) => {
+  const { orgId, userId } = ctx(req);
+  const scope = await dataScopeCond(req, 'leader_id');
+  const ct = await one<any>(
+    `SELECT * FROM contract WHERE contract_id=$1 AND organization_id=$2 ${scope ? 'AND ' + scope : ''}`,
+    [req.params.id, orgId],
+  );
+  if (!ct) return fail(res, '合同不存在或无权操作', 1, 404);
+  if (ct.status >= 4) return fail(res, '已终止/作废的合同不能送审');
+  if (ct.review_status === 1) return fail(res, '已在法务审核中，请勿重复提交');
+  if (ct.review_status === 2) return fail(res, '该合同已审核通过');
+  const comment = String(req.body?.comment ?? '').trim();
+  const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+
+  await one(`UPDATE contract SET review_status=1 WHERE contract_id=$1 RETURNING contract_id`, [ct.contract_id]);
+  await one(
+    `INSERT INTO contract_review (organization_id, contract_id, action, comment, attachments, created_by)
+     VALUES ($1,$2,1,$3,$4,$5) RETURNING review_id`,
+    [orgId, ct.contract_id, comment || '提交法务审核', JSON.stringify(attachments), userId],
+  );
+  // 给所有具备 contract.review 权限的成员生成待办（business_type=80）
+  await query(
+    `INSERT INTO back_log (organization_id, business_type, business_id, business_name, user_id, status, deadline_date, deadline_type)
+     SELECT $1, 80, $2, $3, ur.user_id, 0, now() + interval '3 day', 2
+     FROM (SELECT DISTINCT ur.user_id FROM user_role ur
+           JOIN role_permission rp ON rp.role_id = ur.role_id
+           JOIN permission p ON p.permission_id = rp.permission_id
+           JOIN app_user u ON u.user_id = ur.user_id
+           WHERE p.code='contract.review' AND u.organization_id=$1) ur`,
+    [orgId, ct.contract_id, `法务审核：${ct.name}`],
+  );
+  ok(res, { reviewStatus: 1 });
+}));
+
+// 法务审核（通过/驳回）—— contract.review 权限
+contractsRouter.post('/contracts/:id/review', requirePermission('contract.review'), ah(async (req, res) => {
+  const { orgId, userId } = ctx(req);
+  const ct = await one<any>(`SELECT * FROM contract WHERE contract_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+  if (!ct) return fail(res, '合同不存在', 1, 404);
+  if (ct.review_status !== 1) return fail(res, `当前状态为「${REVIEW_LABEL[ct.review_status]}」，不能审核`);
+  const pass = req.body?.pass === true;
+  const comment = String(req.body?.comment ?? '').trim();
+  if (!pass && !comment) return fail(res, '驳回必须填写审核意见，便于销售修改');
+
+  await one(`UPDATE contract SET review_status=$1 WHERE contract_id=$2 RETURNING contract_id`, [pass ? 2 : 3, ct.contract_id]);
+  await one(
+    `INSERT INTO contract_review (organization_id, contract_id, action, comment, created_by)
+     VALUES ($1,$2,$3,$4,$5) RETURNING review_id`,
+    [orgId, ct.contract_id, pass ? 2 : 3, comment || (pass ? '审核通过' : ''), userId],
+  );
+  // 结掉法务待办；给合同负责人回执待办
+  await query(`UPDATE back_log SET status=1 WHERE organization_id=$1 AND business_type=80 AND business_id=$2 AND status=0`, [orgId, ct.contract_id]);
+  if (ct.leader_id) {
+    await one(
+      `INSERT INTO back_log (organization_id, business_type, business_id, business_name, user_id, status, deadline_date, deadline_type)
+       VALUES ($1,80,$2,$3,$4,0, now() + interval '3 day', 2) RETURNING back_log_id`,
+      [orgId, ct.contract_id, `法务${pass ? '已通过' : '已驳回'}：${ct.name}${comment ? `（${comment.slice(0, 40)}）` : ''}`, ct.leader_id],
+    );
+  }
+  ok(res, { reviewStatus: pass ? 2 : 3 });
+}));
+
+// 协同留言（法务与销售围绕合同讨论；双方都可发）
+contractsRouter.post('/contracts/:id/review-comments', ah(async (req, res) => {
+  const { orgId, userId } = ctx(req);
+  const ct = await one<any>(`SELECT contract_id FROM contract WHERE contract_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+  if (!ct) return fail(res, '合同不存在', 1, 404);
+  const comment = String(req.body?.comment ?? '').trim();
+  if (!comment) return fail(res, '请填写留言内容');
+  const row = await one<any>(
+    `INSERT INTO contract_review (organization_id, contract_id, action, comment, created_by)
+     VALUES ($1,$2,4,$3,$4) RETURNING *`,
+    [orgId, ct.contract_id, comment.slice(0, 1000), userId],
+  );
+  const u = await one<{ name: string }>(`SELECT name FROM app_user WHERE user_id=$1`, [userId]);
+  ok(res, mapReview({ ...row, create_by_name: u?.name }));
+}));
+
 // 申请开票：开票抬头可为合同签约主体，或其同集团子公司（形成 签约=子公司A、开票=子公司B）
 contractsRouter.post(
   '/contracts/:id/invoices',
@@ -96,6 +202,8 @@ contractsRouter.post(
     const { orgId } = ctx(req);
     const ct = await one<any>(`SELECT * FROM contract WHERE contract_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
     if (!ct) return fail(res, '合同不存在', 1, 404);
+    // 法务审核门禁：合同须通过法务审核方可开票
+    if (ct.review_status !== 2) return fail(res, '合同尚未通过法务审核，暂不能开票（请在合同详情提交法务审核）');
     const titleId = Number(req.body?.titleCustomerId || ct.customer_id);
     const amount = String(req.body?.amount ?? '');
     if (!amount || Number(amount) <= 0) return fail(res, '请填写开票金额');

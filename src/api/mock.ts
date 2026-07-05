@@ -56,19 +56,38 @@ export const uploadApi = {
 };
 
 // ---------- 线索 §6.2 ----------
+// 转化留痕：固化转化那一刻的线索原貌（客户侧「查看原线索」）
+const tName2 = (id?: number | null) => MOCK_TERMS.find((t) => t.termId === id)?.name ?? '';
+function markConverted(c: Customer) {
+  if (c.convertedAt) return;
+  c.convertedAt = dayjs().toISOString();
+  c.convertedBy = 1;
+  c.leadSnapshot = {
+    name: c.name, sourceName: tName2(c.source), poolGroupName: tName2(c.poolGroup),
+    industry: c.industry ?? '', region: `${c.province ?? ''}${c.city ?? ''}`,
+    phoneName: c.phoneName ?? '', phone: c.phone ?? '', leaderName: userName(c.leaderId) ?? '',
+    trackingNum: c.trackingNum ?? 0, createdAt: c.createDate, claimAt: c.claimAt, assignAt: c.assignAt,
+    utmSource: c.utmSource, utmMedium: c.utmMedium, utmCampaign: c.utmCampaign,
+  };
+}
+
 export const leadsApi = {
   list: (p: ListParams) => {
     const tab = p.tab ?? 'all';
-    let src = customers.filter((c) => c.category === 1 || c.category === 2);
+    // 已转化线索已成为客户，按转化留痕检索
+    let src = tab === 'converted'
+      ? customers.filter((c) => !!c.convertedAt)
+      : customers.filter((c) => c.category === 1 || c.category === 2);
     if (tab === 'pool') src = src.filter((c) => c.category === 2);
     if (tab === 'mine') src = src.filter((c) => c.category === 1);
-    if (tab === 'converted') src = src.filter((c) => c.currentTrackingStatus === 17);
     return paginate(src, p, ['name', 'phoneName', 'industry']);
   },
   get: (id: number) => delay(customers.find((c) => c.customerId === id)),
   convert: (id: number) => {
     const c = customers.find((x) => x.customerId === id);
     if (c) {
+      if (c.category > 2) return Promise.reject(new Error('该记录已是客户，无需再次转化'));
+      markConverted(c);
       c.category = 3;
       c.currentTrackingStatus = 8;
     }
@@ -124,7 +143,10 @@ export const leadsApi = {
   },
   toOpportunity: (id: number, input?: { name?: string; estimatedAmount?: string }) => {
     const c = customers.find((x) => x.customerId === id);
-    if (c) { c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1; }
+    if (c) {
+      if (c.category <= 2) markConverted(c); // 首次从线索侧转化时留痕
+      c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1;
+    }
     const oid = opportunities.reduce((m, o) => Math.max(m, o.opportunityId), 0) + 1;
     const code = `OPP${dayjs().format('YYYY')}${String(oid).padStart(4, '0')}`;
     opportunities.unshift({
@@ -289,6 +311,12 @@ export const customersApi = {
     const ev: { kind: string; title: string; summary: string; operator?: string; date: string }[] = [];
     const c = customers.find((x) => x.customerId === customerId);
     if (c) ev.push({ kind: 'customer', title: '新增客户', summary: c.name, operator: userName(c.leaderId), date: c.createDate ?? dayjs().toISOString() });
+    if (c?.convertedAt)
+      ev.push({
+        kind: 'lead', title: '线索转化',
+        summary: `由线索转化而来${c.leadSnapshot?.sourceName ? `（来源：${c.leadSnapshot.sourceName}）` : ''}`,
+        operator: userName(c.convertedBy), date: c.convertedAt,
+      });
     for (const t of trackings.filter((x) => x.customerId === customerId))
       ev.push({ kind: 'tracking', title: '跟进记录', summary: (t.comment ?? '').slice(0, 50), operator: userName(t.createBy), date: t.createDate });
     for (const o of opportunities.filter((x) => x.customerId === customerId))
@@ -412,6 +440,24 @@ const mockDiscountPolicy = [
   { levelTermId: 27, maxDiscount: '0.95' },
 ];
 
+// Mock 报价行持久化（草稿回读 + 接口清单 apiItems）
+function writeMockQuoteLines(quotationId: number, lines: any[]) {
+  for (let i = quotationProducts.length - 1; i >= 0; i--) {
+    if (quotationProducts[i].quotationId === quotationId) quotationProducts.splice(i, 1);
+  }
+  let qpid = quotationProducts.reduce((m, x) => Math.max(m, x.id), 0);
+  for (const l of lines) {
+    const p = products.find((x) => x.productId === l.productId);
+    quotationProducts.push({
+      id: ++qpid, quotationId, productId: l.productId, productName: p?.name ?? '', spec: l.spec,
+      quantity: l.quantity, price: l.price, discountRate: l.discountRate,
+      discountPrice: (Number(l.price) * Number(l.discountRate)).toFixed(2),
+      totalPrice: l.pricingMode === 'usage' ? '0.00' : (Number(l.price) * Number(l.discountRate) * l.quantity).toFixed(2),
+      cost: l.cost, pricingMode: l.pricingMode ?? 'qty', apiItems: l.apiItems,
+    } as any);
+  }
+}
+
 export const quotationsApi = {
   list: (p: ListParams) => paginate(quotations, p, ['name', 'code', 'customerName']),
   get: (id: number) => delay(quotations.find((q) => q.quotationId === id)),
@@ -442,11 +488,13 @@ export const quotationsApi = {
       comDiscountRate: total > 0 ? ((amount / total) * 100).toFixed(1) : '0', approval: -1, customerConfirmed: false,
     };
     quotations.unshift(row);
+    writeMockQuoteLines(id, input.lines ?? []);
     return delay(row);
   },
   update: (id: number, input: any) => {
     const q = quotations.find((x) => x.quotationId === id) as any;
     if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm });
+    writeMockQuoteLines(id, input.lines ?? []);
     return delay(q);
   },
   confirm: (id: number) => {
@@ -473,20 +521,55 @@ export const quotationsApi = {
 };
 
 // ---------- 合同 §6.6 ----------
+// 合同法务审核留痕（Mock 内存）
+const contractReviews: import('@/types').ContractReview[] = [];
+let reviewSeq = 9000;
+function pushReview(contractId: number, action: 1 | 2 | 3 | 4, comment: string): import('@/types').ContractReview {
+  const row: import('@/types').ContractReview = {
+    reviewId: ++reviewSeq, contractId, action, comment, attachments: [],
+    createBy: 1, createByName: userName(1) ?? '我', createDate: dayjs().toISOString(),
+  };
+  contractReviews.push(row);
+  return row;
+}
+
 export const contractsApi = {
   list: (p: ListParams) => {
     const tab = p.tab ?? 'all';
     let src = contracts;
     if (tab === 'archived') src = src.filter((c) => c.archive);
     if (tab === 'renew') src = src.filter((c) => c.renewType === 2);
+    if (tab === 'review') src = src.filter((c) => (c.reviewStatus ?? 0) === 1);
     return paginate(src, p, ['name', 'code', 'customerName']);
   },
   get: (id: number) => delay(contracts.find((c) => c.contractId === id)),
+  // ---- 法务审核 + 协同（内存留痕，与后端同状态机） ----
+  reviews: (contractId: number) => delay(contractReviews.filter((r) => r.contractId === contractId)),
+  submitReview: (contractId: number, comment?: string) => {
+    const ct = contracts.find((c) => c.contractId === contractId);
+    if (!ct) return Promise.reject(new Error('合同不存在'));
+    if ((ct.reviewStatus ?? 0) === 1) return Promise.reject(new Error('已在法务审核中，请勿重复提交'));
+    if (ct.reviewStatus === 2) return Promise.reject(new Error('该合同已审核通过'));
+    ct.reviewStatus = 1;
+    pushReview(contractId, 1, comment || '提交法务审核');
+    return delay({ reviewStatus: 1 });
+  },
+  review: (contractId: number, pass: boolean, comment: string) => {
+    const ct = contracts.find((c) => c.contractId === contractId);
+    if (!ct) return Promise.reject(new Error('合同不存在'));
+    if ((ct.reviewStatus ?? 0) !== 1) return Promise.reject(new Error('当前状态不能审核'));
+    if (!pass && !comment.trim()) return Promise.reject(new Error('驳回必须填写审核意见，便于销售修改'));
+    ct.reviewStatus = pass ? 2 : 3;
+    pushReview(contractId, pass ? 2 : 3, comment || (pass ? '审核通过' : ''));
+    return delay({ reviewStatus: ct.reviewStatus });
+  },
+  reviewComment: (contractId: number, comment: string) => delay(pushReview(contractId, 4, comment)),
   payments: (contractId: number) => delay(payments.filter((p) => p.contractId === contractId)),
   paymentSheets: (contractId: number) => delay(paymentSheets.filter((s) => s.contractId === contractId)),
   invoices: (contractId: number) => delay(invoices.filter((i) => i.contractId === contractId)),
   createInvoice: (contractId: number, input: { titleCustomerId?: number; amount: string; invoiceTypeTerm?: number }) => {
     const ct = contracts.find((c) => c.contractId === contractId) as any;
+    if ((ct?.reviewStatus ?? 0) !== 2) return Promise.reject(new Error('合同尚未通过法务审核，暂不能开票（请在合同详情提交法务审核）'));
     const title = customers.find((c) => c.customerId === (input.titleCustomerId ?? ct?.customerId));
     const iid = invoices.reduce((m, i) => Math.max(m, i.invoiceId), 0) + 1;
     const noTax = (Number(input.amount) / 1.06).toFixed(2);

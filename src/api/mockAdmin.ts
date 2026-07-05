@@ -2,7 +2,7 @@
 import { delay, paginate, type ListParams } from './client';
 import { MOCK_TERMS } from '@/mock/terms';
 import { customers } from '@/mock/data';
-import type { AuditLog, BizType, CustomFieldDef, CustomFieldValues, DictItem } from '@/types';
+import type { ApiPrice, AuditLog, BizType, CustomFieldDef, CustomFieldValues, DictItem } from '@/types';
 
 const BIZ: BizType[] = [
   { businessType: 1, label: '客户来源' }, { businessType: 2, label: '商机阶段' }, { businessType: 3, label: '客户状态' },
@@ -94,6 +94,53 @@ export const customFieldsApi = {
     }
     if (c) (c as any).customFields = cleaned;
     return delay({ customFields: cleaned });
+  },
+};
+
+// ---------- 开放平台·数据产品价目表（Mock：节选真实价目表 2026 条目） ----------
+const apiPrices: ApiPrice[] = ([
+  ['工商信息', '886', '企业高级搜索', '数据类', 0.1, '次', '分页查询，每页最大返回5条数据'],
+  ['工商信息', '2001', '企业信息核验', '核查类', 1, '次', ''],
+  ['工商信息', '2003', '客户身份识别', '核查类', 3, '次', ''],
+  ['工商信息', '2006', '综合风险排查', '核查类', 6, '次', ''],
+  ['工商信息', '410', '企业工商照面', '数据类', 0.2, '次', ''],
+  ['法律诉讼', '633', '裁判文书搜索', '数据类', 0.5, '次', ''],
+  ['法律诉讼', '732', '失信核查', '核查类', 0.3, '次', ''],
+  ['经营风险', '824', '经营异常核查', '核查类', 0.3, '次', ''],
+  ['知识产权', '861', '商标信息搜索', '数据类', 0.3, '次', ''],
+  ['历史信息', '926', '历史失信核查', '核查类', 0.3, '次', ''],
+  ['标准企业户套餐', 'PKG-BASIC', '标准企业户·普通套餐（26个接口）', '套餐', 16, '户', '按户计费'],
+  ['标准企业户套餐', 'PKG-PRO', '标准企业户·高级套餐（87个接口）', '套餐', 30, '户', '按户计费'],
+] as [string, string, string, string, number, string, string][]).map(([category, apiCode, name, apiType, price, unit, remark], i) => ({
+  apiPriceId: i + 1, category, apiCode, name, apiType, price, unit, remark, active: true, order: i + 1,
+}));
+let apiPriceSeq = 500;
+
+export const apiPricesApi = {
+  list: (kw?: string, category?: string, all?: boolean) =>
+    delay(apiPrices.filter((p) =>
+      (all || p.active) &&
+      (!category || p.category === category) &&
+      (!kw || p.name.includes(kw) || p.apiCode.includes(kw)))),
+  create: (input: Partial<ApiPrice>) => {
+    if (apiPrices.some((p) => p.apiCode === input.apiCode)) return Promise.reject(new Error(`ApiCode「${input.apiCode}」已存在`));
+    const row: ApiPrice = {
+      apiPriceId: ++apiPriceSeq, category: input.category ?? '', apiCode: input.apiCode ?? '', name: input.name ?? '',
+      apiType: input.apiType ?? '', price: Number(input.price ?? 0), unit: input.unit ?? '次', remark: input.remark ?? '',
+      active: true, order: input.order ?? 999,
+    };
+    apiPrices.push(row);
+    return delay({ apiPriceId: row.apiPriceId });
+  },
+  update: (id: number, input: Partial<ApiPrice>) => {
+    const p = apiPrices.find((x) => x.apiPriceId === id);
+    if (p) Object.assign(p, input);
+    return delay({ ok: true });
+  },
+  remove: (id: number) => {
+    const i = apiPrices.findIndex((x) => x.apiPriceId === id);
+    if (i >= 0) apiPrices.splice(i, 1);
+    return delay({ ok: true });
   },
 };
 

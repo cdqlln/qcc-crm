@@ -22,11 +22,13 @@ leadsRouter.post(
   ah(async (req, res) => {
     const { orgId } = ctx(req);
     const body = parseList(req);
-    const conds = ['organization_id = $1', 'active = 1', 'category IN (1,2)'];
+    // 已转化线索已成为客户(category 3)，「已转化」页签按转化留痕检索，不再限定 category
+    const conds = body.tab === 'converted'
+      ? ['organization_id = $1', 'active = 1', 'converted_at IS NOT NULL']
+      : ['organization_id = $1', 'active = 1', 'category IN (1,2)'];
     const params: unknown[] = [orgId];
     if (body.tab === 'pool') conds.push('category = 2');
     else if (body.tab === 'mine') conds.push('category = 1');
-    else if (body.tab === 'converted') conds.push('status_term_id = 17');
     const scope = await dataScopeCond(req, 'leader_id'); // 数据范围（线索池对所有人可见以便领取）
     if (scope) conds.push(`(category = 2 OR ${scope})`);
 
@@ -57,16 +59,47 @@ leadsRouter.get(
   }),
 );
 
-// 线索转客户（category 1/2 → 3，状态置初访 8）
+// 转化留痕：固化转化那一刻的线索原貌（客户侧「查看原线索」用，不随后续编辑变化）
+export async function buildLeadSnapshot(orgId: number, row: any): Promise<Record<string, unknown>> {
+  const [src, grp, leader] = await Promise.all([
+    row.source_term_id ? one<{ name: string }>(`SELECT name FROM term WHERE term_id=$1`, [row.source_term_id]) : null,
+    row.pool_group_term_id ? one<{ name: string }>(`SELECT name FROM term WHERE term_id=$1`, [row.pool_group_term_id]) : null,
+    row.leader_id ? one<{ name: string }>(`SELECT name FROM app_user WHERE user_id=$1`, [row.leader_id]) : null,
+  ]);
+  return {
+    name: row.name,
+    sourceName: src?.name ?? '',
+    poolGroupName: grp?.name ?? '',
+    industry: row.industry ?? '',
+    region: `${row.province ?? ''}${row.city ?? ''}`,
+    phoneName: row.phone_name ?? '',
+    phone: row.phone ?? '',
+    leaderName: leader?.name ?? '',
+    trackingNum: Number(row.tracking_num ?? 0),
+    createdAt: row.created_at,
+    claimAt: row.claim_at,
+    assignAt: row.assign_at,
+    utmSource: row.utm_source ?? '',
+    utmMedium: row.utm_medium ?? '',
+    utmCampaign: row.utm_campaign ?? '',
+  };
+}
+
+// 线索转客户（category 1/2 → 3，状态置初访 8；记录转化留痕）
 leadsRouter.post(
   '/leads/:id/convert',
   ah(async (req, res) => {
-    const { orgId } = ctx(req);
+    const { orgId, userId } = ctx(req);
+    const lead = await one<any>(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+    if (!lead) return fail(res, '线索不存在', 1, 404);
+    if (lead.category > 2) return fail(res, '该记录已是客户，无需再次转化');
+    const snapshot = await buildLeadSnapshot(orgId, lead);
     const row = await one(
-      `UPDATE customer SET category=3, status_term_id=8 WHERE customer_id=$1 AND organization_id=$2 RETURNING *`,
-      [req.params.id, orgId],
+      `UPDATE customer SET category=3, status_term_id=8,
+         converted_at=now(), converted_by=$3, lead_snapshot=$4
+       WHERE customer_id=$1 AND organization_id=$2 RETURNING *`,
+      [req.params.id, orgId, userId, JSON.stringify(snapshot)],
     );
-    if (!row) return fail(res, '线索不存在', 1, 404);
     ok(res, mapCustomer(row));
   }),
 );
@@ -185,7 +218,16 @@ leadsRouter.post('/leads/:id/to-opportunity', ah(async (req, res) => {
   const { orgId, userId } = ctx(req);
   const c = await one<any>(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
   if (!c) return fail(res, '线索不存在', 1, 404);
-  await one(`UPDATE customer SET category=3, status_term_id=17 WHERE customer_id=$1`, [c.customer_id]);
+  // 首次从线索侧转化时记录留痕（已是客户的复用记录不覆盖）
+  const snapshot = c.category <= 2 && !c.converted_at ? await buildLeadSnapshot(orgId, c) : null;
+  await one(
+    `UPDATE customer SET category=3, status_term_id=17,
+       converted_at = COALESCE(converted_at, CASE WHEN $2::jsonb IS NOT NULL THEN now() END),
+       converted_by = COALESCE(converted_by, CASE WHEN $2::jsonb IS NOT NULL THEN $3::bigint END),
+       lead_snapshot = COALESCE(lead_snapshot, $2)
+     WHERE customer_id=$1 RETURNING customer_id`,
+    [c.customer_id, snapshot ? JSON.stringify(snapshot) : null, userId],
+  );
   const seq = await one<{ n: number }>(`SELECT count(*)+1 AS n FROM opportunity WHERE organization_id=$1`, [orgId]);
   const code = `OPP${new Date().getFullYear()}${String(seq!.n).padStart(4, '0')}`;
   const name = String(req.body?.name || `${c.name} 商机`);
