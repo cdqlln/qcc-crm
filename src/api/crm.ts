@@ -40,6 +40,7 @@ export const orgApi = USE_API ? backend.orgApi : mockOrg.orgApi;
 export const dictApi = USE_API ? backend.dictApi : mockAdmin.dictApi;
 export const auditApi = USE_API ? backend.auditApi : mockAdmin.auditApi;
 export const integrationsApi = USE_API ? backend.integrationsApi : mockAdmin.integrationsApi;
+export const customFieldsApi = USE_API ? backend.customFieldsApi : mockAdmin.customFieldsApi;
 export const groupsApi = USE_API ? backend.groupsApi : mockGroups.groupsApi;
 
 // 分析页/弹窗就地聚合使用的内存数据集（始终来自 mock；接入后端后分析页可改为聚合接口）

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Building2, FileCheck2, FileClock, Languages, ListTree, Percent, PlugZap, Shield, Tags, Workflow } from 'lucide-react';
+import { Building2, FileCheck2, FileClock, Languages, ListTree, Percent, PlugZap, Shield, SlidersHorizontal, Tags, Workflow } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Button, Card, CardHeader } from '@/components/ui/primitives';
 import { useTermsMap } from '@/hooks/useTerms';
@@ -14,6 +14,7 @@ const ITEMS = [
   { icon: Building2, title: '组织 / 部门', desc: '组织信息 + 部门树 + 成员归属', path: '/settings/org', perm: 'system.org' },
   { icon: Shield, title: '角色 / 权限', desc: 'RBAC 权限点 + 数据范围 + 成员分配', path: '/settings/roles', perm: 'system.role' },
   { icon: Tags, title: '字典配置', desc: '来源/阶段/状态/标签等枚举维护', path: '/settings/dict', perm: 'system.dict' },
+  { icon: SlidersHorizontal, title: '自定义字段', desc: '个性客户信息（文本/数字/日期/下拉）', path: '/settings/custom-fields', perm: 'system.dict' },
   { icon: FileClock, title: '日志审计', desc: '关键操作留痕与查询', path: '/settings/audit', perm: 'system.audit' },
   { icon: PlugZap, title: '集成配置', desc: '企查查等外部数据凭据（仅存库）', path: '/settings/integrations', perm: 'system.integration' },
   { icon: Workflow, title: '审批流', desc: 'work_flow_route / task / form', path: '/settings', perm: 'system.role' },

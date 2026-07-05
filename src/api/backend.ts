@@ -184,6 +184,17 @@ export const dashboardApi = {
   data: (scope: string, time: string) => post<import('@/types').DashboardData>('/dashboard', { scope, time }),
 };
 
+export const customFieldsApi = {
+  defs: (all?: boolean) => get<import('@/types').CustomFieldDef[]>(`/custom-fields?businessType=1${all ? '&all=1' : ''}`),
+  create: (input: { name: string; fieldType: string; options?: string[]; required?: boolean; order?: number }) =>
+    post<{ fieldId: number }>('/custom-fields', { businessType: 1, ...input }),
+  update: (id: number, input: { name?: string; options?: string[]; required?: boolean; order?: number; active?: boolean }) =>
+    put(`/custom-fields/${id}`, input),
+  remove: (id: number) => req(`/custom-fields/${id}`, { method: 'DELETE' }),
+  saveValues: (customerId: number, values: import('@/types').CustomFieldValues) =>
+    put<{ customFields: import('@/types').CustomFieldValues }>(`/customers/${customerId}/custom-fields`, { values }),
+};
+
 // 附件上传（multipart；不手动设 Content-Type，由浏览器带 boundary）
 export const uploadApi = {
   upload: async (files: File[]): Promise<import('@/types').Attachment[]> => {

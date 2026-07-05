@@ -36,6 +36,7 @@ export const mapCustomer = (r: any) => ({
   approval: r.approval,
   active: r.active,
   createDate: r.created_at,
+  customFields: r.custom_fields ?? {},
 });
 
 export const mapContact = (r: any) => ({

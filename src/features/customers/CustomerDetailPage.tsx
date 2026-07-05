@@ -29,6 +29,7 @@ import { MoneyText } from '@/components/ui/MoneyText';
 import { StatusTag } from '@/components/ui/StatusTag';
 import { AiPanel } from '@/components/ai/AiPanel';
 import { CustomerInsightPanel } from '@/components/ai/CustomerInsightPanel';
+import { CustomFieldsSection } from './CustomFieldsSection';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -132,6 +133,7 @@ export function CustomerDetailPage() {
                     <Metric label="跟进次数" value={String(cust.trackingNum)} />
                   </div>
                 </Section>
+                <CustomFieldsSection customerId={cid} values={cust.customFields} />
                 <GroupSection cust={cust} />
               </div>
               <div>

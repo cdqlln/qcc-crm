@@ -86,6 +86,7 @@ export interface Customer {
   approval: ApprovalStatus;
   active: -1 | 0 | 1 | 2;
   createDate?: string;
+  customFields?: Record<string, string | number>; // 个性客户信息（field_id → 值）
 }
 
 export interface Contact {
@@ -638,3 +639,16 @@ export interface DashboardData {
   pk: { name: string; amount: number }[];
   recentTrackings: { by: string; customerId: number; customerName: string; comment: string; priorityLevel: number; at: string }[];
 }
+
+// ---- 个性客户信息（租户自定义字段；见 server/src/routes/customFields.ts） ----
+export interface CustomFieldDef {
+  fieldId: number;
+  businessType: number; // 1客户
+  name: string;
+  fieldType: 'text' | 'number' | 'date' | 'select';
+  options: string[];
+  required: boolean;
+  order: number;
+  active: boolean;
+}
+export type CustomFieldValues = Record<string, string | number>;

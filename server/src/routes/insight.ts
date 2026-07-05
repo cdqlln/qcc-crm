@@ -13,6 +13,7 @@ export interface CustomerFacts {
   customer: {
     name: string; level: string; industry: string; groupName: string;
     leader: string; source: string; createdAt: string; trackingNum: number; lastTrackingAt: string | null;
+    custom?: Record<string, string>; // 个性客户信息（自定义字段 名称→值）
   };
   contacts: { name: string; position: string; isKey: boolean }[];
   opportunities: {
@@ -86,6 +87,21 @@ export async function gatherFacts(orgId: number, customerId: number): Promise<Cu
   const num = (v: unknown) => Number(v ?? 0);
   const contractAmount = contracts.reduce((s: number, c: any) => s + num(c.amount), 0);
   const receivedAmount = contracts.reduce((s: number, c: any) => s + num(c.received_amount), 0);
+
+  // 个性客户信息（自定义字段）：field_id → 名称，供 AI 一并分析
+  const custom: Record<string, string> = {};
+  const cf = (cust.custom_fields ?? {}) as Record<string, unknown>;
+  if (Object.keys(cf).length > 0) {
+    const defs = await query<any>(
+      `SELECT field_id, name FROM custom_field_def WHERE organization_id=$1 AND business_type=1 AND active`,
+      [orgId],
+    );
+    for (const d of defs) {
+      const v = cf[String(d.field_id)];
+      if (v != null && String(v).trim() !== '') custom[d.name] = String(v);
+    }
+  }
+
   return {
     customer: {
       name: cust.name,
@@ -97,6 +113,7 @@ export async function gatherFacts(orgId: number, customerId: number): Promise<Cu
       createdAt: String(cust.created_at).slice(0, 10),
       trackingNum: num(cust.tracking_num),
       lastTrackingAt: cust.tracking_update_at ? String(cust.tracking_update_at).slice(0, 10) : null,
+      ...(Object.keys(custom).length > 0 ? { custom } : {}),
     },
     contacts: contacts.map((c: any) => ({ name: c.name, position: c.position ?? '', isKey: c.type === 1 })),
     opportunities: opps.map((o: any) => ({

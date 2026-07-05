@@ -1,7 +1,8 @@
 // 字典配置 / 日志审计 内存 Mock。
 import { delay, paginate, type ListParams } from './client';
 import { MOCK_TERMS } from '@/mock/terms';
-import type { AuditLog, BizType, DictItem } from '@/types';
+import { customers } from '@/mock/data';
+import type { AuditLog, BizType, CustomFieldDef, CustomFieldValues, DictItem } from '@/types';
 
 const BIZ: BizType[] = [
   { businessType: 1, label: '客户来源' }, { businessType: 2, label: '商机阶段' }, { businessType: 3, label: '客户状态' },
@@ -51,6 +52,49 @@ const logs: AuditLog[] = [
 ];
 export const auditApi = {
   list: (p: ListParams) => paginate(logs, p, ['action', 'detail', 'userName', 'path']),
+};
+
+// ---------- 个性客户信息：自定义字段（内存 Mock；值存 customer.customFields） ----------
+const fieldDefs: CustomFieldDef[] = [
+  { fieldId: 1, businessType: 1, name: '年采购预算', fieldType: 'number', options: [], required: false, order: 1, active: true },
+  { fieldId: 2, businessType: 1, name: '决策周期', fieldType: 'select', options: ['1个月内', '1-3个月', '3-6个月', '6个月以上'], required: false, order: 2, active: true },
+  { fieldId: 3, businessType: 1, name: '合同续签日', fieldType: 'date', options: [], required: false, order: 3, active: true },
+  { fieldId: 4, businessType: 1, name: '客户偏好备注', fieldType: 'text', options: [], required: false, order: 4, active: true },
+];
+let fid = 100;
+
+export const customFieldsApi = {
+  defs: (all?: boolean) => delay(fieldDefs.filter((d) => all || d.active).slice().sort((a, b) => a.order - b.order)),
+  create: (input: { name: string; fieldType: string; options?: string[]; required?: boolean; order?: number }) => {
+    if (fieldDefs.some((d) => d.name === input.name)) return Promise.reject(new Error(`字段「${input.name}」已存在`));
+    const def: CustomFieldDef = {
+      fieldId: ++fid, businessType: 1, name: input.name, fieldType: input.fieldType as CustomFieldDef['fieldType'],
+      options: input.options ?? [], required: input.required ?? false, order: input.order ?? 0, active: true,
+    };
+    fieldDefs.push(def);
+    return delay({ fieldId: def.fieldId });
+  },
+  update: (id: number, input: Partial<Pick<CustomFieldDef, 'name' | 'options' | 'required' | 'order' | 'active'>>) => {
+    const d = fieldDefs.find((x) => x.fieldId === id);
+    if (d) Object.assign(d, input);
+    return delay({ ok: true });
+  },
+  remove: (id: number) => {
+    const i = fieldDefs.findIndex((x) => x.fieldId === id);
+    if (i >= 0) fieldDefs.splice(i, 1);
+    return delay({ ok: true });
+  },
+  saveValues: (customerId: number, values: CustomFieldValues) => {
+    const c = customers.find((x) => x.customerId === customerId);
+    const cleaned: CustomFieldValues = {};
+    for (const d of fieldDefs.filter((x) => x.active)) {
+      const v = values[String(d.fieldId)];
+      if (v == null || String(v).trim() === '') continue;
+      cleaned[String(d.fieldId)] = d.fieldType === 'number' ? Number(v) : String(v);
+    }
+    if (c) (c as any).customFields = cleaned;
+    return delay({ customFields: cleaned });
+  },
 };
 
 // Mock 集成配置（内存）
