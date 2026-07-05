@@ -440,6 +440,24 @@ const mockDiscountPolicy = [
   { levelTermId: 27, maxDiscount: '0.95' },
 ];
 
+// Mock 报价行持久化（草稿回读 + 接口清单 apiItems）
+function writeMockQuoteLines(quotationId: number, lines: any[]) {
+  for (let i = quotationProducts.length - 1; i >= 0; i--) {
+    if (quotationProducts[i].quotationId === quotationId) quotationProducts.splice(i, 1);
+  }
+  let qpid = quotationProducts.reduce((m, x) => Math.max(m, x.id), 0);
+  for (const l of lines) {
+    const p = products.find((x) => x.productId === l.productId);
+    quotationProducts.push({
+      id: ++qpid, quotationId, productId: l.productId, productName: p?.name ?? '', spec: l.spec,
+      quantity: l.quantity, price: l.price, discountRate: l.discountRate,
+      discountPrice: (Number(l.price) * Number(l.discountRate)).toFixed(2),
+      totalPrice: l.pricingMode === 'usage' ? '0.00' : (Number(l.price) * Number(l.discountRate) * l.quantity).toFixed(2),
+      cost: l.cost, pricingMode: l.pricingMode ?? 'qty', apiItems: l.apiItems,
+    } as any);
+  }
+}
+
 export const quotationsApi = {
   list: (p: ListParams) => paginate(quotations, p, ['name', 'code', 'customerName']),
   get: (id: number) => delay(quotations.find((q) => q.quotationId === id)),
@@ -470,11 +488,13 @@ export const quotationsApi = {
       comDiscountRate: total > 0 ? ((amount / total) * 100).toFixed(1) : '0', approval: -1, customerConfirmed: false,
     };
     quotations.unshift(row);
+    writeMockQuoteLines(id, input.lines ?? []);
     return delay(row);
   },
   update: (id: number, input: any) => {
     const q = quotations.find((x) => x.quotationId === id) as any;
     if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm });
+    writeMockQuoteLines(id, input.lines ?? []);
     return delay(q);
   },
   confirm: (id: number) => {

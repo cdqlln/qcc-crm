@@ -192,6 +192,16 @@ export const dashboardApi = {
   data: (scope: string, time: string) => post<import('@/types').DashboardData>('/dashboard', { scope, time }),
 };
 
+export const apiPricesApi = {
+  list: (kw?: string, category?: string, all?: boolean) =>
+    get<import('@/types').ApiPrice[]>(
+      `/api-prices?${new URLSearchParams({ ...(kw ? { kw } : {}), ...(category ? { category } : {}), ...(all ? { all: '1' } : {}) })}`,
+    ),
+  create: (input: Partial<import('@/types').ApiPrice>) => post<{ apiPriceId: number }>('/api-prices', input),
+  update: (id: number, input: Partial<import('@/types').ApiPrice>) => put(`/api-prices/${id}`, input),
+  remove: (id: number) => req(`/api-prices/${id}`, { method: 'DELETE' }),
+};
+
 export const usersApi = {
   search: (kw?: string) => get<{ userId: number; name: string; depName: string }[]>(`/users${kw ? `?kw=${encodeURIComponent(kw)}` : ''}`),
 };

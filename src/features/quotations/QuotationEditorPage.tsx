@@ -15,7 +15,8 @@ import { cn } from '@/lib/cn';
 import { PRODUCT_KIND, QUOTE_TYPE, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
 import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { printQuotation } from './printQuotation';
-import type { Product, ProductTier } from '@/types';
+import { ApiItemsPicker } from './ApiItemsPicker';
+import type { ApiQuoteItem, Product, ProductTier } from '@/types';
 
 interface Line {
   id: number;
@@ -31,6 +32,7 @@ interface Line {
   kind?: 1 | 2;
   tiers?: ProductTier[];
   pricingMode: 'qty' | 'usage'; // 按数量 / 按用量(API接口单价，框架)
+  apiItems?: ApiQuoteItem[]; // 数据接口报价清单（按量行，选自价目表）
 }
 
 const GROSS_WARN = 30;
@@ -66,6 +68,7 @@ export function QuotationEditorPage() {
   const [seeded, setSeeded] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
+  const [apiPickerLine, setApiPickerLine] = useState<number | null>(null); // 正在编辑接口清单的行
 
   // 当前报价单的客户分级（决定折扣自主上限）
   const effCustomerId = customerId ?? existing?.customerId;
@@ -99,6 +102,7 @@ export function QuotationEditorPage() {
           price: l.price, discountRate: l.discountRate, cost: d(l.cost).div(l.quantity || 1).toFixed(2),
           minDiscount: p?.minDiscount ?? '0.70', salesDiscount: p?.salesDiscount ?? '0.95', kind: p?.kind,
           pricingMode: (l.pricingMode ?? 'qty') as 'qty' | 'usage',
+          apiItems: l.apiItems,
         };
       }),
     );
@@ -173,7 +177,10 @@ export function QuotationEditorPage() {
     const needApproval = rows.some((r) => r.belowAuthority);
     const hasHard = rows.some((r) => r.belowHard);
     const hasUsage = rows.some((r) => r.usage);
-    return { rows, total, cost, amount, grossProfit, grossRate, needApproval, hasHard, hasUsage };
+    // 数据接口清单：预估月费用（Σ 报价单价×预估月量；框架按实际用量结算，不计入固定总价）
+    const estMonthly = rows.reduce(
+      (s, r) => (r.usage && r.apiItems ? s + r.apiItems.reduce((x, i) => x + i.quotePrice * i.estCalls, 0) : s), 0);
+    return { rows, total, cost, amount, grossProfit, grossRate, needApproval, hasHard, hasUsage, estMonthly };
   }, [lines, orderDiscount, otherChargesTotal, discount, levelCap]);
 
   const lowMargin = Number(calc.grossRate) < GROSS_WARN && lines.length > 0;
@@ -193,6 +200,7 @@ export function QuotationEditorPage() {
       price: l.price, discountRate: l.discountRate,
       cost: l.pricingMode === 'usage' ? '0' : mul(l.cost, l.quantity),
       pricingMode: l.pricingMode,
+      apiItems: l.pricingMode === 'usage' && l.apiItems?.length ? l.apiItems : undefined,
     })),
   });
 
@@ -262,6 +270,14 @@ export function QuotationEditorPage() {
           </>
         }
       />
+
+      {apiPickerLine != null && (
+        <ApiItemsPicker
+          initial={lines.find((l) => l.id === apiPickerLine)?.apiItems ?? []}
+          onSave={(items) => update(apiPickerLine, { apiItems: items })}
+          onClose={() => setApiPickerLine(null)}
+        />
+      )}
 
       {signOpen && (persistedId ?? savedId) && (
         <SignEntityDialog
@@ -399,6 +415,15 @@ export function QuotationEditorPage() {
                               ))}
                             </span>
                           )}
+                          {r.usage && (
+                            <button
+                              onClick={() => setApiPickerLine(r.id)}
+                              className={cn('rounded border px-1.5 py-0.5 text-[10px]',
+                                r.apiItems?.length ? 'border-primary/50 bg-primary-weak text-primary' : 'border-dashed border-border text-text-weak hover:border-primary/50 hover:text-primary')}
+                            >
+                              {r.apiItems?.length ? `数据接口 ${r.apiItems.length} 项` : '+ 选择数据接口（价目表）'}
+                            </button>
+                          )}
                         </div>
                       </td>
                       <td className="px-2 py-2 text-right">
@@ -481,6 +506,12 @@ export function QuotationEditorPage() {
             <EditRow label="优惠" value={discount} onChange={setDiscount} money />
             <div className="my-2 h-px bg-border" />
             <Row label="金额" value={<MoneyText value={calc.amount} strong className="text-lg text-primary" />} />
+            {calc.estMonthly > 0 && (
+              <Row
+                label="预估月费用(接口)"
+                value={<span className="tabular-nums text-text" title="按接口清单 报价单价×预估月调用量 估算；框架按实际用量结算，不计入固定金额">≈ ¥{calc.estMonthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</span>}
+              />
+            )}
             <Row label="预估成本" value={<MoneyText value={calc.cost} className="text-text-weak" />} />
             <Row label="毛利" value={<MoneyText value={calc.grossProfit} />} />
             <Row label="毛利率" value={<span className={cn('font-semibold tabular-nums', lowMargin ? 'text-danger' : 'text-success')}>{calc.grossRate}%</span>} />

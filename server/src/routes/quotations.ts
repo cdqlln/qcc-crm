@@ -36,6 +36,14 @@ quotationsRouter.put(
   }),
 );
 
+const apiItemSchema = z.object({
+  apiCode: z.string(),
+  name: z.string(),
+  price: z.coerce.number().min(0),       // 标准单价（价目表）
+  quotePrice: z.coerce.number().min(0),  // 报价单价（可折）
+  estCalls: z.coerce.number().min(0).default(0), // 预估月调用量（框架可为 0）
+  unit: z.string().default('次'),
+});
 const lineSchema = z.object({
   productId: z.coerce.number().int().positive(),
   spec: z.string().optional(),
@@ -44,6 +52,7 @@ const lineSchema = z.object({
   discountRate: z.string(),
   cost: z.string(),
   pricingMode: z.enum(['qty', 'usage']).default('qty'),
+  apiItems: z.array(apiItemSchema).max(200).optional(), // 数据API接口报价清单（按量行）
 });
 const saveSchema = z.object({
   name: z.string().min(1),
@@ -74,9 +83,10 @@ async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
   for (const l of lines) {
     await client.query(
-      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.discountRate, l.cost, l.pricingMode ?? 'qty'],
+      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode, api_items)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.discountRate, l.cost, l.pricingMode ?? 'qty',
+       l.apiItems?.length ? JSON.stringify(l.apiItems) : null],
     );
   }
   // 行项目维护 total / cost（amount 等为生成列自动派生）

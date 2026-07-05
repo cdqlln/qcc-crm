@@ -145,6 +145,7 @@ export const mapQuotationProduct = (r: any) => ({
   totalPrice: r.total_price,
   cost: r.cost,
   pricingMode: r.pricing_mode,
+  apiItems: r.api_items ?? undefined, // 数据API接口报价清单
 });
 
 export const mapContract = (r: any) => ({

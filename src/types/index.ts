@@ -243,6 +243,7 @@ export interface QuotationProduct {
   totalPrice: string; // 小计（按用量行为 0）
   cost: string;
   pricingMode?: 'qty' | 'usage'; // qty按数量 usage按用量(API接口单价,框架)
+  apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（按量行，选自价目表）
 }
 
 export interface Contract {
@@ -688,3 +689,26 @@ export interface CustomFieldDef {
   active: boolean;
 }
 export type CustomFieldValues = Record<string, string | number>;
+
+// ---- 开放平台·数据产品价目表（数据API套餐 接口级报价；见 server/src/routes/apiPrices.ts） ----
+export interface ApiPrice {
+  apiPriceId: number;
+  category: string;
+  apiCode: string;
+  name: string;
+  apiType: string;
+  price: number;
+  unit: string;
+  remark: string;
+  active: boolean;
+  order: number;
+}
+/** 报价单按量行挂载的接口报价清单条目 */
+export interface ApiQuoteItem {
+  apiCode: string;
+  name: string;
+  price: number;      // 标准单价
+  quotePrice: number; // 报价单价（可折）
+  estCalls: number;   // 预估月调用量（框架可为 0）
+  unit: string;
+}

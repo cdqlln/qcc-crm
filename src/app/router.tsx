@@ -27,6 +27,7 @@ import { DictPage } from '@/features/settings/DictPage';
 import { AuditPage } from '@/features/settings/AuditPage';
 import { IntegrationsPage } from '@/features/settings/IntegrationsPage';
 import { CustomFieldsPage } from '@/features/settings/CustomFieldsPage';
+import { ApiPricesPage } from '@/features/settings/ApiPricesPage';
 import { PlaceholderPage } from '@/features/settings/PlaceholderPage';
 import { SignPage } from '@/features/collab/SignPage';
 import { TicketsPage } from '@/features/collab/TicketsPage';
@@ -70,6 +71,7 @@ export const router = createBrowserRouter([
       { path: 'settings/audit', element: <AuditPage /> },
       { path: 'settings/integrations', element: <IntegrationsPage /> },
       { path: 'settings/custom-fields', element: <CustomFieldsPage /> },
+      { path: 'settings/api-prices', element: <ApiPricesPage /> },
       { path: 'settings', element: <SettingsPage /> },
       { path: 'settings/company', element: <PlaceholderPage title="企业工商" /> },
       { path: 'sign', element: <SignPage /> },
