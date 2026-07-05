@@ -152,6 +152,7 @@ export interface Opportunity {
   depId: number;
   competitor?: string;
   mainProduct?: string;
+  requirement?: string; // 客户需求描述
   renewType: 1 | 2;
   additional: 1 | 2;
   approval: ApprovalStatus;

@@ -374,9 +374,13 @@ export const opportunitiesApi = {
     if (o) o.status = status;
     return delay(o);
   },
-  create: (input: Partial<Opportunity>) => {
+  create: (input: Partial<Opportunity> & { productIds?: number[] }) => {
     const id = nextId(opportunities, 'opportunityId');
     const cust = customers.find((c) => c.customerId === input.customerId);
+    // 涉及产品（多选）→ main_product 存名称
+    if (input.productIds?.length && !input.mainProduct) {
+      input = { ...input, mainProduct: products.filter((p) => input.productIds!.includes(p.productId)).map((p) => p.name).join(' / ') };
+    }
     const row: Opportunity = {
       opportunityId: id,
       code: `OPP${dayjs().format('YYYY')}${String(id).padStart(4, '0')}`,
@@ -621,6 +625,17 @@ export const aiApi = {
     }
     return delay({ reply, actions, generatedBy: 'rules' as const }, 500);
   },
+};
+
+// ---------- 成员搜索（选人控件通用） ----------
+export const usersApi = {
+  search: (kw?: string) =>
+    delay(
+      MOCK_USERS.filter((u) => !kw || u.name.includes(kw))
+        .slice(0, 20)
+        .map((u) => ({ userId: u.userId, name: u.name, depName: u.depName ?? '' })),
+      150,
+    ),
 };
 
 // ---------- 工作台聚合（Mock：由内存数据计算，与后端 /dashboard 同构） ----------

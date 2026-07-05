@@ -20,7 +20,6 @@ import { Button, Avatar, UserCell } from '@/components/ui/primitives';
 import { Card, CardHeader } from '@/components/ui/primitives';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
-import { MOCK_USERS } from '@/mock/org';
 import { Descriptions } from '@/components/ui/Descriptions';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
@@ -31,6 +30,7 @@ import { AiPanel } from '@/components/ai/AiPanel';
 import { CustomerInsightPanel } from '@/components/ai/CustomerInsightPanel';
 import { CustomFieldsSection } from './CustomFieldsSection';
 import { EditCustomerDialog } from './EditCustomerDialog';
+import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -204,7 +204,7 @@ export function CustomerDetailPage() {
 
 function TransferDialog({ customerId, currentLeaderId, onClose }: { customerId: number; currentLeaderId?: number; onClose: () => void }) {
   const toast = useUI((s) => s.toast);
-  const [toUserId, setToUserId] = useState('');
+  const [toUserId, setToUserId] = useState<number | undefined>(undefined);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async () => {
@@ -225,13 +225,8 @@ function TransferDialog({ customerId, currentLeaderId, onClose }: { customerId: 
       footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={submit} disabled={busy}>提交交接审批</Button></>}>
       <div className="space-y-4">
         <p className="rounded-md bg-primary-weak/60 px-3 py-2 text-xs text-primary">移交需经主管交接审批；通过后该客户负责人与历史报价价格随之转移并锁定。</p>
-        <Field label="接收人" required>
-          <Select value={toUserId} onChange={(e) => setToUserId(e.target.value)}>
-            <option value="">请选择</option>
-            {MOCK_USERS.filter((u) => u.userId !== currentLeaderId).map((u) => (
-              <option key={u.userId} value={u.userId}>{u.name}（{u.depName}）</option>
-            ))}
-          </Select>
+        <Field label="接收人" required hint="搜索姓名选择组织成员">
+          <UserSearchSelect value={toUserId} onChange={(id) => setToUserId(id)} excludeUserId={currentLeaderId} />
         </Field>
         <Field label="移交原因"><TextArea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="如：区域调整 / 离职交接" /></Field>
       </div>

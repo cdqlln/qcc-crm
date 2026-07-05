@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { one } from '../db.js';
+import { one, query } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapOpportunity } from '../mappers.js';
@@ -83,6 +83,8 @@ const createSchema = z.object({
   expiryDate: z.string().min(1),
   leaderId: z.coerce.number().int().positive(),
   competitor: z.string().optional(),
+  requirement: z.string().optional(),                       // 客户需求描述
+  productIds: z.array(z.coerce.number().int().positive()).optional(), // 涉及产品（多选）
 });
 
 opportunitiesRouter.post(
@@ -97,15 +99,27 @@ opportunitiesRouter.post(
       [d.customerId, orgId],
     );
     if (!cust) return fail(res, '客户不存在');
+    // 涉及产品（多选）：写 opportunity_product 行，main_product 存名称便于列表展示
+    const prodIds = (d.productIds ?? []).slice(0, 20);
+    const prods = prodIds.length
+      ? await query<any>(`SELECT product_id, name, price FROM product WHERE organization_id=$1 AND product_id = ANY($2)`, [orgId, prodIds])
+      : [];
     // 生成编号
     const seq = await one<{ n: number }>(`SELECT count(*)+1 AS n FROM opportunity WHERE organization_id=$1`, [orgId]);
     const code = `OPP${new Date().getFullYear()}${String(seq!.n).padStart(4, '0')}`;
-    const row = await one(
+    const row = await one<any>(
       `INSERT INTO opportunity (organization_id, code, name, customer_id, estimated_amount, status_term_id,
-         expiry_date, leader_id, competitor, status_expiry_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, now()+interval '14 day') RETURNING *`,
-      [orgId, code, d.name, d.customerId, d.estimatedAmount, d.status, d.expiryDate, d.leaderId, d.competitor ?? null],
+         expiry_date, leader_id, competitor, requirement, main_product, status_expiry_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, now()+interval '14 day') RETURNING *`,
+      [orgId, code, d.name, d.customerId, d.estimatedAmount, d.status, d.expiryDate, d.leaderId, d.competitor ?? null,
+       d.requirement ?? null, prods.length ? prods.map((p: any) => p.name).join(' / ') : null],
     );
+    for (const p of prods) {
+      await one(
+        `INSERT INTO opportunity_product (opportunity_id, product_id, quantity, price) VALUES ($1,$2,1,$3) RETURNING id`,
+        [row.opportunity_id, p.product_id, p.price],
+      );
+    }
     await one(`UPDATE customer SET opportunity_count = opportunity_count + 1 WHERE customer_id=$1`, [d.customerId]);
     ok(res, mapOpportunity({ ...row, customer_name: cust.name }));
   }),

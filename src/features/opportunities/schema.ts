@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 export const opportunitySchema = z.object({
+  requirement: z.string().min(5, '请先描述客户需求（至少 5 个字）'),
   name: z.string().min(2, '商机名称至少 2 个字'),
   customerId: z.coerce.number({ invalid_type_error: '请选择客户' }).int().positive('请选择客户'),
   estimatedAmount: z

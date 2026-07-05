@@ -87,6 +87,7 @@ export const mapOpportunity = (r: any) => ({
   depId: r.department_id,
   competitor: r.competitor,
   mainProduct: r.main_product,
+  requirement: r.requirement,
   renewType: r.renew_type,
   additional: r.additional,
   approval: r.approval,

@@ -121,7 +121,7 @@ export const opportunitiesApi = {
   list: (p: ListParams) => list<Opportunity>('/opportunities/list', p),
   get: (id: number) => get<Opportunity>(`/opportunities/${id}`),
   updateStage: (id: number, status: number) => put<Opportunity>(`/opportunities/${id}/stage`, { status }),
-  create: (input: Partial<Opportunity>) => post<Opportunity>('/opportunities', input),
+  create: (input: Partial<Opportunity> & { productIds?: number[] }) => post<Opportunity>('/opportunities', input),
 };
 
 export const quotationsApi = {
@@ -183,6 +183,10 @@ export const searchApi = {
 
 export const dashboardApi = {
   data: (scope: string, time: string) => post<import('@/types').DashboardData>('/dashboard', { scope, time }),
+};
+
+export const usersApi = {
+  search: (kw?: string) => get<{ userId: number; name: string; depName: string }[]>(`/users${kw ? `?kw=${encodeURIComponent(kw)}` : ''}`),
 };
 
 export const customFieldsApi = {

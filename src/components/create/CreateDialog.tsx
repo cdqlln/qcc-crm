@@ -1,19 +1,21 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm, type UseFormRegister, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQueryClient } from '@tanstack/react-query';
-import { contractsApi, customers as customerStore, customersApi, leadsApi, opportunitiesApi } from '@/api/crm';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { contractsApi, customers as customerStore, customersApi, leadsApi, opportunitiesApi, productsApi } from '@/api/crm';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/primitives';
-import { Field, Select, TextInput } from '@/components/ui/form';
+import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { CompanyNameInput } from '@/components/ui/CompanyNameInput';
 import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
+import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
 import { useCreate, type CreatableEntity } from '@/store/create';
 import { useUI } from '@/store/ui';
+import { useAuth } from '@/store/auth';
 import { useTerm } from '@/hooks/useTerms';
 import { TERMS_BIZ } from '@/mock/terms';
-import { MOCK_USERS } from '@/mock/org';
+import { cn } from '@/lib/cn';
 import { leadSchema, type LeadForm } from '@/features/leads/schema';
 import { customerSchema, type CustomerForm } from '@/features/customers/schema';
 import { opportunitySchema, type OpportunityForm } from '@/features/opportunities/schema';
@@ -62,21 +64,33 @@ function Footer({ onCancel, submitting }: { onCancel: () => void; submitting?: b
   );
 }
 
-function UserSelect({ register, name, errors }: { register: UseFormRegister<any>; name: string; errors: FieldErrors }) {
+// 负责人：默认当前用户，支持搜索组织成员选择（全模块通用口径）
+function OwnerField({ value, valueName, onChange, error }: {
+  value?: number; valueName?: string; onChange: (id: number | undefined, name?: string) => void; error?: string;
+}) {
   return (
-    <Field label="负责人" required error={errors[name]?.message as string}>
-      <Select invalid={!!errors[name]} defaultValue="" {...register(name)}>
-        <option value="" disabled>
-          请选择
-        </option>
-        {MOCK_USERS.map((u) => (
-          <option key={u.userId} value={u.userId}>
-            {u.name}（{u.depName}）
-          </option>
-        ))}
-      </Select>
+    <Field label="负责人" required error={error} hint="默认本人，可搜索成员更换">
+      <UserSearchSelect value={value} valueName={valueName} onChange={onChange} invalid={!!error} />
     </Field>
   );
+}
+
+/** 各表单共用：leaderId 受控接线（默认当前用户） */
+function useOwner(watch: (n: any) => any, setValue: (n: any, v: any, o?: any) => void) {
+  const user = useAuth((s) => s.user);
+  const [leaderName, setLeaderName] = useState<string | undefined>(user?.name);
+  const raw = watch('leaderId');
+  return {
+    defaultLeaderId: user?.userId,
+    ownerProps: {
+      value: raw ? Number(raw) : undefined,
+      valueName: leaderName,
+      onChange: (id: number | undefined, name?: string) => {
+        setValue('leaderId', (id ?? '') as any, { shouldValidate: true });
+        setLeaderName(name);
+      },
+    },
+  };
 }
 
 function CustomerSelect({
@@ -108,11 +122,15 @@ function CustomerSelect({
 // ---------------- 线索 ----------------
 function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
   const { term, close, toast, qc } = useShared();
+  const me = useAuth((s) => s.user);
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
-  } = useForm<LeadForm>({ resolver: zodResolver(leadSchema), defaultValues: preset as any });
+  } = useForm<LeadForm>({ resolver: zodResolver(leadSchema), defaultValues: { leaderId: me?.userId as any, ...(preset as any) } });
+  const { ownerProps } = useOwner(watch, setValue);
 
   const onSubmit = async (data: LeadForm) => {
     await leadsApi.create(data);
@@ -164,7 +182,7 @@ function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="联系电话" error={errors.phone?.message}>
           <TextInput placeholder="手机号" {...register('phone')} />
         </Field>
-        <UserSelect register={register} name="leaderId" errors={errors} />
+        <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />
     </form>
@@ -174,13 +192,15 @@ function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
 // ---------------- 客户 ----------------
 function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
   const { term, close, toast, qc } = useShared();
+  const me = useAuth((s) => s.user);
   const {
     register,
     handleSubmit,
     setValue,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<CustomerForm>({ resolver: zodResolver(customerSchema), defaultValues: preset as any });
+  } = useForm<CustomerForm>({ resolver: zodResolver(customerSchema), defaultValues: { leaderId: me?.userId as any, ...(preset as any) } });
+  const { ownerProps } = useOwner(watch, setValue);
   const nameVal = watch('name') ?? '';
 
   const onSubmit = async (data: CustomerForm) => {
@@ -243,7 +263,7 @@ function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="企查查ID" hint="填写后按工商关系自动归集集团">
           <TextInput placeholder="如 QCCDEMO_A1" {...register('refCompanyId')} />
         </Field>
-        <UserSelect register={register} name="leaderId" errors={errors} />
+        <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />
     </form>
@@ -253,18 +273,53 @@ function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
 // ---------------- 商机 ----------------
 function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
   const { term, close, toast, qc } = useShared();
+  const me = useAuth((s) => s.user);
   const {
     register,
     handleSubmit,
     setValue,
+    getValues,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<OpportunityForm>({ resolver: zodResolver(opportunitySchema), defaultValues: preset as any });
+  } = useForm<OpportunityForm>({
+    resolver: zodResolver(opportunitySchema),
+    defaultValues: { leaderId: me?.userId as any, ...(preset as any) },
+  });
+  const { ownerProps } = useOwner(watch, setValue);
   const custId = watch('customerId');
   const [custName, setCustName] = useState<string | undefined>(undefined);
 
+  // 涉及产品（多选 chips）
+  const { data: allProducts = [] } = useQuery({ queryKey: ['products-all'], queryFn: () => productsApi.all(), staleTime: 60_000 });
+  const [productIds, setProductIds] = useState<number[]>([]);
+
+  // 选择客户/集团后自动生成商机名称（可改）：仅在名称为空或仍是上次自动值时覆盖
+  const autoNameRef = useRef('');
+  const buildAutoName = (cname?: string, pids: number[] = productIds) => {
+    if (!cname) return '';
+    const pnames = allProducts.filter((p) => pids.includes(p.productId)).map((p) => p.name);
+    return `${cname}·${pnames[0] ?? '合作'}${pnames.length > 1 ? `等${pnames.length}项` : ''}商机`;
+  };
+  const maybeAutoName = (cname?: string, pids?: number[]) => {
+    const current = (getValues('name') ?? '').trim();
+    if (current && current !== autoNameRef.current) return; // 用户已手改，不覆盖
+    const auto = buildAutoName(cname, pids);
+    if (auto) {
+      autoNameRef.current = auto;
+      setValue('name', auto, { shouldValidate: true });
+    }
+  };
+
+  const toggleProduct = (pid: number) => {
+    setProductIds((cur) => {
+      const next = cur.includes(pid) ? cur.filter((x) => x !== pid) : [...cur, pid];
+      maybeAutoName(custName, next);
+      return next;
+    });
+  };
+
   const onSubmit = async (data: OpportunityForm) => {
-    await opportunitiesApi.create(data);
+    await opportunitiesApi.create({ ...data, productIds } as any);
     qc.invalidateQueries({ queryKey: ['opportunities'] });
     qc.invalidateQueries({ queryKey: ['opportunities-all'] });
     toast(`商机「${data.name}」已创建`, 'success');
@@ -274,10 +329,35 @@ function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
   return (
     <form onSubmit={handleSubmit(onSubmit)}>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="商机名称" required error={errors.name?.message} className="col-span-2">
-          <TextInput invalid={!!errors.name} placeholder="如：某某客户·专业版采购" {...register('name')} />
+        {/* 1. 先描述客户需求 */}
+        <Field label="客户需求" required error={errors.requirement?.message} className="col-span-2">
+          <TextArea rows={3} placeholder="客户想解决什么问题？预算/时间/关键诉求…" {...register('requirement')} />
         </Field>
-        <Field label="客户 / 集团主体" required error={errors.customerId?.message as string} hint="可直接输入公司或集团名称，工商候选可自动建档">
+
+        {/* 2. 涉及产品（多选） */}
+        <Field label="涉及产品（多选）" className="col-span-2" hint="影响自动命名与后续报价">
+          <div className="flex flex-wrap gap-2">
+            {allProducts.map((p) => (
+              <button
+                key={p.productId}
+                type="button"
+                onClick={() => toggleProduct(p.productId)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs transition-colors',
+                  productIds.includes(p.productId)
+                    ? 'border-primary bg-primary-weak text-primary'
+                    : 'border-border text-text-weak hover:border-primary/50',
+                )}
+              >
+                {p.name}
+              </button>
+            ))}
+            {allProducts.length === 0 && <span className="text-xs text-text-faint">暂无产品目录</span>}
+          </div>
+        </Field>
+
+        {/* 3. 客户/集团 → 自动生成名称 */}
+        <Field label="客户 / 集团主体" required error={errors.customerId?.message as string} hint="选择后自动生成商机名称（可修改）">
           <EntitySearchSelect
             value={custId ? Number(custId) : undefined}
             valueName={custName}
@@ -285,9 +365,14 @@ function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
             onChange={(id, name) => {
               setValue('customerId', (id ?? '') as any, { shouldValidate: true });
               setCustName(name);
+              maybeAutoName(name);
             }}
           />
         </Field>
+        <Field label="商机名称" required error={errors.name?.message} hint="按「客户·产品」自动生成，可直接修改">
+          <TextInput invalid={!!errors.name} placeholder="选择客户后自动生成" {...register('name')} />
+        </Field>
+
         <Field label="预计成交金额" required error={errors.estimatedAmount?.message}>
           <TextInput invalid={!!errors.estimatedAmount} inputMode="decimal" placeholder="0.00" {...register('estimatedAmount')} />
         </Field>
@@ -309,7 +394,7 @@ function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="竞争对手" error={errors.competitor?.message}>
           <TextInput placeholder="可选" {...register('competitor')} />
         </Field>
-        <UserSelect register={register} name="leaderId" errors={errors} />
+        <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />
     </form>
@@ -319,14 +404,18 @@ function OpportunityFormView({ preset }: { preset?: Record<string, unknown> }) {
 // ---------------- 合同 ----------------
 function ContractFormView({ preset }: { preset?: Record<string, unknown> }) {
   const { close, toast, qc, navigate } = useShared();
+  const me = useAuth((s) => s.user);
   const {
     register,
     handleSubmit,
+    setValue,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ContractForm>({
     resolver: zodResolver(contractSchema),
-    defaultValues: { contractType: 1, renewType: 1, ...(preset as any) },
+    defaultValues: { contractType: 1, renewType: 1, leaderId: me?.userId as any, ...(preset as any) },
   });
+  const { ownerProps } = useOwner(watch, setValue);
 
   const onSubmit = async (data: ContractForm) => {
     const row = await contractsApi.create(data as Record<string, unknown>);
@@ -365,7 +454,7 @@ function ContractFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="到期日期" required error={errors.expiredDate?.message}>
           <TextInput invalid={!!errors.expiredDate} type="date" {...register('expiredDate')} />
         </Field>
-        <UserSelect register={register} name="leaderId" errors={errors} />
+        <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />
     </form>

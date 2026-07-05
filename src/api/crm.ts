@@ -27,6 +27,7 @@ export const targetsApi = USE_API ? backend.targetsApi : mock.targetsApi;
 export const aiApi = USE_API ? backend.aiApi : mock.aiApi;
 export const searchApi = USE_API ? backend.searchApi : mock.searchApi;
 export const dashboardApi = USE_API ? backend.dashboardApi : mock.dashboardApi;
+export const usersApi = USE_API ? backend.usersApi : mock.usersApi;
 export const uploadApi = USE_API ? backend.uploadApi : mock.uploadApi;
 export const assetUrl = backend.assetUrl;
 
