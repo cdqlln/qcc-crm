@@ -712,3 +712,26 @@ export interface ApiQuoteItem {
   estCalls: number;   // 预估月调用量（框架可为 0）
   unit: string;
 }
+
+/** 价目表调价记录（手工改价/文件导入） */
+export interface ApiPriceHistory {
+  historyId: number;
+  apiPriceId: number | null;
+  apiCode: string;
+  name: string;
+  oldPrice: number | null; // null=新增条目
+  newPrice: number;
+  source: 'manual' | 'import';
+  changedBy?: number;
+  changedByName: string;
+  createDate: string;
+}
+/** 价目表导入结果 */
+export interface ApiPriceImportResult {
+  total: number;
+  inserted: number;
+  priceChanged: number;
+  unchanged: number;
+  changes: { apiCode: string; name: string; oldPrice: number; newPrice: number }[];
+  fileName: string;
+}

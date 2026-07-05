@@ -116,6 +116,16 @@ const apiPrices: ApiPrice[] = ([
 }));
 let apiPriceSeq = 500;
 
+// 调价留痕（Mock 内存）
+const priceHistory: import('@/types').ApiPriceHistory[] = [];
+let histSeq = 0;
+function logPrice(p: ApiPrice, oldPrice: number | null, newPrice: number, source: 'manual' | 'import') {
+  priceHistory.unshift({
+    historyId: ++histSeq, apiPriceId: p.apiPriceId, apiCode: p.apiCode, name: p.name,
+    oldPrice, newPrice, source, changedBy: 1, changedByName: '张伟', createDate: new Date().toISOString(),
+  });
+}
+
 export const apiPricesApi = {
   list: (kw?: string, category?: string, all?: boolean) =>
     delay(apiPrices.filter((p) =>
@@ -130,17 +140,49 @@ export const apiPricesApi = {
       active: true, order: input.order ?? 999,
     };
     apiPrices.push(row);
+    logPrice(row, null, row.price, 'manual');
     return delay({ apiPriceId: row.apiPriceId });
   },
   update: (id: number, input: Partial<ApiPrice>) => {
     const p = apiPrices.find((x) => x.apiPriceId === id);
-    if (p) Object.assign(p, input);
+    if (p) {
+      if (input.price != null && Number(input.price) !== p.price) logPrice(p, p.price, Number(input.price), 'manual');
+      Object.assign(p, input);
+    }
     return delay({ ok: true });
   },
   remove: (id: number) => {
     const i = apiPrices.findIndex((x) => x.apiPriceId === id);
     if (i >= 0) apiPrices.splice(i, 1);
     return delay({ ok: true });
+  },
+  history: () => delay(priceHistory.slice(0, 200)),
+  itemHistory: (id: number) => delay(priceHistory.filter((h) => h.apiPriceId === id)),
+  // Mock 导入：仅支持 CSV（xlsx 解析在后端）；列：类别,ApiCode,名称,类型,标准价[,单位,备注]
+  importFile: async (file: File): Promise<import('@/types').ApiPriceImportResult> => {
+    if (!/\.csv$/i.test(file.name)) throw new Error('演示模式仅支持 CSV 导入；xlsx 请部署后端后使用');
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    let inserted = 0, priceChanged = 0, unchanged = 0;
+    const changes: { apiCode: string; name: string; oldPrice: number; newPrice: number }[] = [];
+    for (const line of lines.slice(1)) {
+      const [category = '', apiCode = '', name = '', apiType = '', priceS = '', unit = '次', remark = ''] = line.split(',').map((s) => s.trim());
+      const price = Number(priceS);
+      if (!apiCode || !name || Number.isNaN(price)) continue;
+      const ex = apiPrices.find((p) => p.apiCode === apiCode);
+      if (!ex) {
+        const row: ApiPrice = { apiPriceId: ++apiPriceSeq, category, apiCode, name, apiType, price, unit: unit || '次', remark, active: true, order: 999 };
+        apiPrices.push(row);
+        logPrice(row, null, price, 'import');
+        inserted++;
+      } else if (ex.price !== price) {
+        logPrice(ex, ex.price, price, 'import');
+        if (changes.length < 20) changes.push({ apiCode, name, oldPrice: ex.price, newPrice: price });
+        Object.assign(ex, { name, price, category: category || ex.category });
+        priceChanged++;
+      } else unchanged++;
+    }
+    return { total: inserted + priceChanged + unchanged, inserted, priceChanged, unchanged, changes, fileName: file.name };
   },
 };
 
