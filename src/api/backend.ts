@@ -78,6 +78,7 @@ export const leadsApi = {
   list: (p: ListParams) => list<Customer>('/leads/list', p),
   get: (id: number) => get<Customer>(`/leads/${id}`),
   convert: (id: number) => post<Customer>(`/leads/${id}/convert`),
+  unlink: (id: number) => post<Customer>(`/leads/${id}/unlink`),
   create: (input: Partial<Customer>) => post<Customer>('/leads', input),
   update: (id: number, input: Partial<Customer>) => put<Customer>(`/leads/${id}`, input),
   claim: (ids: number[]) => post<Customer[]>('/leads/claim', { ids }),

@@ -86,12 +86,27 @@ export const leadsApi = {
   convert: (id: number) => {
     const c = customers.find((x) => x.customerId === id);
     if (c) {
+      if (c.convertedAt) return Promise.reject(new Error('该线索已转化并关联客户，如需重新转化请先在「已转化」中解除关联'));
       if (c.category > 2) return Promise.reject(new Error('该记录已是客户，无需再次转化'));
       markConverted(c);
       c.category = 3;
       c.currentTrackingStatus = 8;
     }
     return delay(c);
+  },
+  // 解除转化关联：客户名下无业务单据时退回线索，可重新转化
+  unlink: (id: number) => {
+    const c = customers.find((x) => x.customerId === id);
+    if (!c) return Promise.reject(new Error('记录不存在'));
+    if (!c.convertedAt) return Promise.reject(new Error('该线索未转化，无需解除关联'));
+    const opp = opportunities.filter((o) => o.customerId === id && o.active === 1).length;
+    const quo = quotations.filter((q) => q.customerId === id).length;
+    const ct = contracts.filter((x) => x.customerId === id).length;
+    if (opp + quo + ct > 0)
+      return Promise.reject(new Error(`客户名下已有业务单据（商机 ${opp} / 报价 ${quo} / 合同 ${ct}），不能解除关联；请先处理相关单据`));
+    c.category = 1; c.currentTrackingStatus = 16;
+    c.convertedAt = undefined; c.convertedBy = undefined; c.leadSnapshot = undefined; c.groupId = null; c.groupName = undefined;
+    return delay({ ...c });
   },
   create: (input: Partial<Customer>) => {
     const row: Customer = {
@@ -143,6 +158,7 @@ export const leadsApi = {
   },
   toOpportunity: (id: number, input?: { name?: string; estimatedAmount?: string }) => {
     const c = customers.find((x) => x.customerId === id);
+    if (c?.convertedAt) return Promise.reject(new Error('该线索已转化并关联客户，如需再转商机请先在「已转化」中解除关联'));
     if (c) {
       if (c.category <= 2) markConverted(c); // 首次从线索侧转化时留痕
       c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1;

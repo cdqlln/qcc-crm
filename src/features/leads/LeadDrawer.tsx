@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowRightLeft, Briefcase, Phone } from 'lucide-react';
+import { ArrowRightLeft, Briefcase, ExternalLink, Phone, Unlink } from 'lucide-react';
 import { Paperclip } from 'lucide-react';
 import { customersApi, leadsApi, uploadApi } from '@/api/crm';
 import { Drawer } from '@/components/ui/Drawer';
@@ -43,11 +43,27 @@ export function LeadDrawer({
   const navigate = useNavigate();
   const { data: lead, isLoading } = useQuery({ queryKey: ['lead', id], queryFn: () => leadsApi.get(id) });
 
+  const qc = useQueryClient();
   const toOpportunity = async () => {
-    const r = await leadsApi.toOpportunity(id);
-    toast('已转为商机', 'success');
-    onClose();
-    navigate(`/opportunities/${r.opportunityId}`);
+    try {
+      const r = await leadsApi.toOpportunity(id);
+      toast('已转为商机', 'success');
+      onClose();
+      navigate(`/opportunities/${r.opportunityId}`);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '转商机失败', 'error');
+    }
+  };
+  // 解除转化关联（客户名下无业务单据时）→ 记录退回线索，可重新转化
+  const unlink = async () => {
+    try {
+      await leadsApi.unlink(id);
+      qc.invalidateQueries({ queryKey: ['lead', id] });
+      qc.invalidateQueries({ queryKey: ['leads'] });
+      toast('已解除转化关联，记录退回线索，可重新转化', 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '解除失败', 'error');
+    }
   };
 
   return (
@@ -58,12 +74,25 @@ export function LeadDrawer({
       subtitle={lead && <TermTag id={lead.currentTrackingStatus} />}
       footer={
         lead && (
-          <div className="flex justify-end gap-2">
-            <Button onClick={toOpportunity}><Briefcase size={14} />转商机</Button>
-            <Button variant="primary" onClick={() => onConvert([lead])}>
-              <ArrowRightLeft size={14} />转为客户（保留跟进）
-            </Button>
-          </div>
+          lead.convertedAt ? (
+            // 已转化：便捷跳转所转客户查看/维护；再转需先解除关联
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-text-faint">已于 {formatDate(lead.convertedAt)} 转化为客户；如需重新转化请先解除关联</span>
+              <div className="flex gap-2">
+                <Button onClick={unlink}><Unlink size={14} />解除关联</Button>
+                <Button variant="primary" onClick={() => { onClose(); navigate(`/customers/${lead.customerId}`); }}>
+                  <ExternalLink size={14} />查看客户
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-end gap-2">
+              <Button onClick={toOpportunity}><Briefcase size={14} />转商机</Button>
+              <Button variant="primary" onClick={() => onConvert([lead])}>
+                <ArrowRightLeft size={14} />转为客户（保留跟进）
+              </Button>
+            </div>
+          )
         )
       }
     >
