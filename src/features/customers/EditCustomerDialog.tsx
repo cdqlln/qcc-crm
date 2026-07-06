@@ -10,6 +10,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/primitives';
 import { Field, Select, TextInput } from '@/components/ui/form';
 import { CompanyNameInput } from '@/components/ui/CompanyNameInput';
+import { RegionSelect } from '@/components/ui/RegionSelect';
 import type { Customer } from '@/types';
 
 // 编辑口径 = 创建表单去掉负责人（负责人变更走「移交」审批流）
@@ -103,8 +104,13 @@ export function EditCustomerDialog({ cust, onClose }: { cust: Customer; onClose:
           </Select>
         </Field>
         <Field label="行业" error={errors.industry?.message}><TextInput {...register('industry')} /></Field>
-        <Field label="省份"><TextInput placeholder="如：江苏省" {...register('province')} /></Field>
-        <Field label="城市"><TextInput placeholder="如：苏州市" {...register('city')} /></Field>
+        <Field label="所在地区" className="col-span-2" hint="省市联动，也可直接输入">
+          <RegionSelect
+            province={watch('province') ?? ''}
+            city={watch('city') ?? ''}
+            onChange={(p, c) => { setValue('province', p); setValue('city', c); }}
+          />
+        </Field>
         <Field label="联系人" error={errors.phoneName?.message}><TextInput {...register('phoneName')} /></Field>
         <Field label="联系电话" error={errors.phone?.message}><TextInput {...register('phone')} /></Field>
         <Field label="邮箱" error={errors.email?.message}><TextInput {...register('email')} /></Field>
