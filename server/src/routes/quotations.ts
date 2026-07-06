@@ -75,6 +75,15 @@ const saveSchema = z.object({
   lines: z.array(lineSchema).default([]),
 });
 
+// 报价有效期不得早于当前日期（服务端兜底，前端已有快捷项与拦截）
+function expiredDateInvalid(d: { expiredDate?: string; quoteDate?: string }): string | null {
+  if (!d.expiredDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (d.expiredDate < today) return '报价有效期不能早于当前日期';
+  if (d.quoteDate && d.expiredDate < d.quoteDate) return '报价有效期不能早于报价日期';
+  return null;
+}
+
 // 其他费用合计：有明细则取明细之和，否则用传入的合计
 function otherChargesSum(d: { otherChargesItems?: { amount: number }[]; otherCharges: string }): string {
   if (d.otherChargesItems && d.otherChargesItems.length)
@@ -109,6 +118,8 @@ quotationsRouter.post(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
+    const dateErr = expiredDateInvalid(d);
+    if (dateErr) return fail(res, dateErr);
     // 数据范围校验：销售只能为自归属（可见范围内）的客户建报价
     const scope = await dataScopeCond(req, 'leader_id');
     const own = await one(`SELECT 1 FROM customer WHERE customer_id=$1 AND organization_id=$2 ${scope ? 'AND ' + scope : ''}`, [d.customerId, orgId]);
@@ -142,6 +153,8 @@ quotationsRouter.put(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
+    const dateErr = expiredDateInvalid(d);
+    if (dateErr) return fail(res, dateErr);
     const exists = await one(`SELECT quotation_id FROM quotation WHERE quotation_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
     if (!exists) return fail(res, '报价单不存在', 1, 404);
     await tx(async (c) => {

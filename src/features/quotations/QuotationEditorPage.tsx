@@ -14,6 +14,7 @@ import { add, mul, rate, sub, d } from '@/lib/money';
 import { cn } from '@/lib/cn';
 import { PRODUCT_KIND, QUOTE_TYPE, QUOTE_TYPE_OPTIONS, resolveTierPrice } from '@/lib/enums';
 import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
+import { dayjs } from '@/lib/format';
 import { printQuotation } from './printQuotation';
 import { ApiItemsPicker } from './ApiItemsPicker';
 import type { ApiQuoteItem, Product, ProductTier } from '@/types';
@@ -217,6 +218,7 @@ export function QuotationEditorPage() {
   const ensureSaved = async (): Promise<number | null> => {
     if (!effCustomerId) { toast('请先选择客户', 'error'); return null; }
     if (lines.length === 0) { toast('请先添加产品', 'error'); return null; }
+    if (expiredDate && expiredDate < dayjs().format('YYYY-MM-DD')) { toast('报价有效期不能早于当前日期', 'error'); return null; }
     if (persistedId) { await quotationsApi.update(persistedId, payload()); return persistedId; }
     const created = await quotationsApi.create(payload());
     setSavedId(created.quotationId);
@@ -349,7 +351,33 @@ export function QuotationEditorPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-text">报价有效期</label>
-                <input type="date" value={expiredDate} onChange={(e) => setExpiredDate(e.target.value)} className="h-9 w-40 rounded-md border border-border px-3 text-sm outline-none focus:border-primary" />
+                <input
+                  type="date"
+                  value={expiredDate}
+                  min={dayjs().format('YYYY-MM-DD')}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v && v < dayjs().format('YYYY-MM-DD')) return toast('报价有效期不能早于当前日期', 'error');
+                    setExpiredDate(v);
+                  }}
+                  className="h-9 w-40 rounded-md border border-border px-3 text-sm outline-none focus:border-primary"
+                />
+                {/* 快捷有效期：自报价日期（未填则今天）起算 */}
+                <div className="flex items-center gap-1">
+                  {([['三天', 3, 'day'], ['一周', 7, 'day'], ['一月', 1, 'month'], ['三个月', 3, 'month']] as const).map(([label, n, unit]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        const base = quoteDate && quoteDate >= dayjs().format('YYYY-MM-DD') ? dayjs(quoteDate) : dayjs();
+                        setExpiredDate(base.add(n, unit).format('YYYY-MM-DD'));
+                      }}
+                      className="rounded border border-border px-1.5 py-0.5 text-[11px] text-text-weak hover:border-primary/50 hover:text-primary"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-text">合同限期(月)</label>
