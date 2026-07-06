@@ -125,6 +125,17 @@ export interface Contact {
   sourceLeadsId?: number;
   remark?: string;
   wecomExternalUserid?: string;
+  isKp?: boolean; // KP 关键人标志
+  orgNodeId?: number; // 所属客户组织节点
+}
+
+/** 客户内部组织结构节点（销售调研收集） */
+export interface CustomerOrgNode {
+  nodeId: number;
+  customerId: number;
+  parentId: number | null;
+  name: string;
+  order: number;
 }
 
 export interface Attachment {

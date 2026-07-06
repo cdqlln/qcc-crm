@@ -56,6 +56,8 @@ export const mapContact = (r: any) => ({
   sourceLeadsId: r.source_leads_id,
   remark: r.remark,
   wecomExternalUserid: r.wecom_external_userid,
+  isKp: r.is_kp ?? false,
+  orgNodeId: r.org_node_id != null ? Number(r.org_node_id) : undefined,
 });
 
 export const mapTracking = (r: any) => ({

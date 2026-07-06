@@ -114,6 +114,11 @@ export const customersApi = {
     ),
   transfer: (customerId: number, toUserId: number, reason: string) =>
     post<{ status: number }>(`/customers/${customerId}/transfer`, { toUserId, reason }),
+  orgNodes: (customerId: number) => get<import('@/types').CustomerOrgNode[]>(`/customers/${customerId}/org-nodes`),
+  createOrgNode: (customerId: number, input: { name: string; parentId?: number | null }) =>
+    post<import('@/types').CustomerOrgNode>(`/customers/${customerId}/org-nodes`, input),
+  renameOrgNode: (nodeId: number, name: string) => put(`/org-nodes/${nodeId}`, { name }),
+  removeOrgNode: (nodeId: number) => req(`/org-nodes/${nodeId}`, { method: 'DELETE' }),
   insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
   generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),
 };

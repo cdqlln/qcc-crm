@@ -32,6 +32,8 @@ import { CustomFieldsSection } from './CustomFieldsSection';
 import { EditCustomerDialog } from './EditCustomerDialog';
 import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
 import { LeadOriginDialog } from './LeadOriginDialog';
+import { CustomerOrgTab } from './CustomerOrgTab';
+import { ComboInput } from '@/components/ui/ComboInput';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -68,6 +70,7 @@ export function CustomerDetailPage() {
     { key: 'overview', label: '概览' },
     { key: 'insight', label: '客户洞察' },
     { key: 'contacts', label: '联系人', count: contactList.length },
+    { key: 'org', label: '组织结构' },
     { key: 'tracking', label: '跟进记录', count: trackList.length },
     { key: 'opportunities', label: '商机', count: custOpps.length },
     { key: 'quotations', label: '报价', count: custQuotes.length },
@@ -161,6 +164,7 @@ export function CustomerDetailPage() {
           {tab === 'insight' && <CustomerInsightPanel customerId={cid} />}
 
           {tab === 'contacts' && <ContactsTab customerId={cid} />}
+          {tab === 'org' && <CustomerOrgTab customerId={cid} />}
 
           {tab === 'tracking' && (
             trackList.length === 0 ? <EmptyState title="暂无跟进记录" /> : (
@@ -290,6 +294,7 @@ function ContactsTab({ customerId }: { customerId: number }) {
                 <Avatar name={c.name} size={28} />
                 <span className="font-medium text-text">{c.name}</span>
                 {c.type === 1 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-xs text-primary">主</span>}
+                {c.isKp && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-xs font-semibold text-warning">KP</span>}
                 {c.wecomExternalUserid && <StatusTag kind="success" label="企微已关联" dot={false} />}
                 <div className="ml-auto flex gap-1 opacity-0 group-hover:opacity-100">
                   <button onClick={() => setEdit(c)} className="text-text-faint hover:text-primary"><Pencil size={13} /></button>
@@ -314,19 +319,27 @@ function ContactsTab({ customerId }: { customerId: number }) {
   );
 }
 
+const POSITION_PRESETS = ['总经理', '副总经理', 'CTO', 'CIO', 'CFO', '技术负责人', '采购总监', '采购经理', '财务负责人', '法务负责人', '运营负责人', 'IT经理', '项目经理'];
+
 function ContactDialog({ customerId, contact, onClose, onDone }: { customerId: number; contact: Contact | null; onClose: () => void; onDone: () => void }) {
   const toast = useUI((s) => s.toast);
   const [f, setF] = useState({
     name: contact?.name ?? '', phone: contact?.phone ?? '', email: contact?.email ?? '', wechat: contact?.wechat ?? '',
     position: contact?.position ?? '', department: contact?.department ?? '', remark: contact?.remark ?? '',
     type: contact?.type ?? 2, wecomExternalUserid: contact?.wecomExternalUserid ?? '',
+    isKp: contact?.isKp ?? false, orgNodeId: contact?.orgNodeId,
   });
+  // 部门候选=客户组织结构节点+历史部门；岗位候选=常用岗位+历史岗位（均可自由输入）
+  const { data: orgNodes = [] } = useQuery({ queryKey: ['cust-org', customerId], queryFn: () => customersApi.orgNodes(customerId) });
+  const { data: allContacts = [] } = useQuery({ queryKey: ['contacts', customerId], queryFn: () => customersApi.contacts(customerId) });
+  const deptOptions = [...orgNodes.map((n) => n.name), ...allContacts.map((c) => c.department ?? '')];
+  const posOptions = [...POSITION_PRESETS, ...allContacts.map((c) => c.position ?? '')];
   const set = (k: string, v: any) => setF((s) => ({ ...s, [k]: v }));
   const save = async () => {
     if (!f.name.trim()) return toast('请填写姓名', 'error');
-    const payload = { ...f, type: Number(f.type) as 1 | 2 };
-    if (contact) await customersApi.updateContact(contact.contactId, payload);
-    else await customersApi.createContact(customerId, payload);
+    const payload = { ...f, type: Number(f.type) as 1 | 2, orgNodeId: f.orgNodeId ?? null };
+    if (contact) await customersApi.updateContact(contact.contactId, payload as any);
+    else await customersApi.createContact(customerId, payload as any);
     toast('已保存联系人', 'success'); onDone();
   };
   return (
@@ -335,8 +348,20 @@ function ContactDialog({ customerId, contact, onClose, onDone }: { customerId: n
       <div className="grid grid-cols-2 gap-4">
         <Field label="姓名" required><TextInput value={f.name} onChange={(e) => set('name', e.target.value)} /></Field>
         <Field label="类型"><Select value={f.type} onChange={(e) => set('type', Number(e.target.value))}><option value={1}>主联系人</option><option value={2}>普通</option></Select></Field>
-        <Field label="岗位"><TextInput value={f.position} onChange={(e) => set('position', e.target.value)} /></Field>
-        <Field label="部门"><TextInput value={f.department} onChange={(e) => set('department', e.target.value)} /></Field>
+        <Field label="岗位" hint="可从常用岗位选择或直接输入"><ComboInput value={f.position} options={posOptions} placeholder="如：采购总监" onChange={(v) => set('position', v)} /></Field>
+        <Field label="部门" hint="候选来自客户组织结构与历史记录"><ComboInput value={f.department} options={deptOptions} placeholder="如：采购部" onChange={(v) => set('department', v)} /></Field>
+        <Field label="所属组织节点" hint="挂到「组织结构」树上展示">
+          <Select value={f.orgNodeId ?? ''} onChange={(e) => set('orgNodeId', e.target.value ? Number(e.target.value) : undefined)}>
+            <option value="">不挂节点</option>
+            {orgNodes.map((n) => <option key={n.nodeId} value={n.nodeId}>{n.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="KP 关键人" hint="决策链关键人物，组织结构与列表高亮">
+          <label className="flex h-9 cursor-pointer items-center gap-2 text-sm text-text-weak">
+            <input type="checkbox" checked={f.isKp} onChange={(e) => set('isKp', e.target.checked)} />
+            标记为 KP（Key Person）
+          </label>
+        </Field>
         <Field label="电话"><TextInput value={f.phone} onChange={(e) => set('phone', e.target.value)} /></Field>
         <Field label="邮箱"><TextInput value={f.email} onChange={(e) => set('email', e.target.value)} /></Field>
         <Field label="微信号"><TextInput value={f.wechat} onChange={(e) => set('wechat', e.target.value)} /></Field>

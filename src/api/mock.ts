@@ -286,6 +286,10 @@ function buildMockInsight(customerId: number): import('@/types').CustomerInsight
   return { reportId: ++mockReportId, createdAt: dayjs().toISOString(), facts, insight, generatedBy: 'rules' };
 }
 
+// 客户组织结构（Mock 内存）
+const custOrgNodes: import('@/types').CustomerOrgNode[] = [];
+let orgNodeSeq = 7000;
+
 // ---------- 客户 §6.3 ----------
 export const customersApi = {
   list: (p: ListParams) => {
@@ -374,6 +378,31 @@ export const customersApi = {
     return delay(Object.values(byProduct));
   },
   transfer: (_customerId: number, _toUserId: number, _reason: string) => delay({ status: 2 }),
+  // ---- 客户组织结构（内存 Mock） ----
+  orgNodes: (customerId: number) => delay(custOrgNodes.filter((n) => n.customerId === customerId)),
+  createOrgNode: (customerId: number, input: { name: string; parentId?: number | null }) => {
+    const row: import('@/types').CustomerOrgNode = {
+      nodeId: ++orgNodeSeq, customerId, parentId: input.parentId ?? null, name: input.name, order: custOrgNodes.length,
+    };
+    custOrgNodes.push(row);
+    return delay(row);
+  },
+  renameOrgNode: (nodeId: number, name: string) => {
+    const n = custOrgNodes.find((x) => x.nodeId === nodeId);
+    if (n) n.name = name;
+    return delay({ ok: true });
+  },
+  removeOrgNode: (nodeId: number) => {
+    const drop = new Set<number>([nodeId]);
+    let grew = true;
+    while (grew) { // 级联子节点
+      grew = false;
+      for (const n of custOrgNodes) if (n.parentId != null && drop.has(n.parentId) && !drop.has(n.nodeId)) { drop.add(n.nodeId); grew = true; }
+    }
+    for (let i = custOrgNodes.length - 1; i >= 0; i--) if (drop.has(custOrgNodes[i].nodeId)) custOrgNodes.splice(i, 1);
+    contacts.forEach((c) => { if (c.orgNodeId && drop.has(c.orgNodeId)) c.orgNodeId = undefined; });
+    return delay({ ok: true });
+  },
   update: (id: number, input: Partial<Customer>) => {
     const c = customers.find((x) => x.customerId === id);
     if (!c) return Promise.reject(new Error('客户不存在'));
