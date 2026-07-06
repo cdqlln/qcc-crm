@@ -41,7 +41,7 @@ const apiItemSchema = z.object({
   name: z.string(),
   price: z.coerce.number().min(0),       // 标准单价（价目表）
   quotePrice: z.coerce.number().min(0),  // 报价单价（可折）
-  estCalls: z.coerce.number().min(0).default(0), // 预估月调用量（框架可为 0）
+  estCalls: z.coerce.number().min(0).default(0), // 预估年调用量（框架可为 0）
   unit: z.string().default('次'),
 });
 const lineSchema = z.object({
@@ -51,6 +51,7 @@ const lineSchema = z.object({
   price: z.string(),
   discountRate: z.string(),
   cost: z.string(),
+  gift: z.coerce.boolean().default(false), // 赠送项目（折扣为0、实际单价为0）
   pricingMode: z.enum(['qty', 'usage']).default('qty'),
   apiItems: z.array(apiItemSchema).max(200).optional(), // 数据API接口报价清单（按量行）
 });
@@ -69,6 +70,8 @@ const saveSchema = z.object({
   quoteDate: z.string().optional(),
   expiredDate: z.string().optional(),
   contractTerm: z.coerce.number().int().optional(),
+  serviceYears: z.coerce.number().int().min(0).optional(), // 服务年限（年）
+  remark: z.string().max(2000).optional(),                 // 报价说明信息
   lines: z.array(lineSchema).default([]),
 });
 
@@ -83,9 +86,9 @@ async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
   for (const l of lines) {
     await client.query(
-      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode, api_items)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.discountRate, l.cost, l.pricingMode ?? 'qty',
+      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, gift, pricing_mode, api_items)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.gift ? '0' : l.discountRate, l.cost, l.gift ?? false, l.pricingMode ?? 'qty',
        l.apiItems?.length ? JSON.stringify(l.apiItems) : null],
     );
   }
@@ -117,10 +120,11 @@ quotationsRouter.post(
       const q = (await c.query(
         `INSERT INTO quotation (organization_id, code, version, name, customer_id, group_id, contact_id, opportunity_id,
            quote_type, currency, status, order_discount_rate, other_charges, other_charges_items, discount,
-           quote_date, expired_date, contract_term, approval)
-         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14,$15,$16,-1) RETURNING quotation_id`,
+           quote_date, expired_date, contract_term, service_years, remark, approval)
+         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14,$15,$16,$17,$18,-1) RETURNING quotation_id`,
         [orgId, code, d.name, d.customerId, d.groupId ?? null, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency,
-         d.orderDiscountRate, oc, JSON.stringify(d.otherChargesItems ?? []), d.discount, d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null],
+         d.orderDiscountRate, oc, JSON.stringify(d.otherChargesItems ?? []), d.discount, d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null,
+         d.serviceYears ?? null, d.remark ?? null],
       )).rows[0];
       await writeLines(c, q.quotation_id, d.lines);
       return q.quotation_id;
@@ -144,9 +148,11 @@ quotationsRouter.put(
       await c.query(
         `UPDATE quotation SET name=$1, customer_id=$2, contact_id=$3, opportunity_id=$4, quote_type=$5,
            currency=$6, order_discount_rate=$7, other_charges=$8, discount=$9,
-           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14, group_id=$15 WHERE quotation_id=$10`,
+           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14, group_id=$15,
+           service_years=$16, remark=$17 WHERE quotation_id=$10`,
         [d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency, d.orderDiscountRate, otherChargesSum(d), d.discount, req.params.id,
-         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? []), d.groupId ?? null],
+         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? []), d.groupId ?? null,
+         d.serviceYears ?? null, d.remark ?? null],
       );
       await writeLines(c, Number(req.params.id), d.lines);
     });

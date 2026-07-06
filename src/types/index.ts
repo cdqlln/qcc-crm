@@ -207,6 +207,8 @@ export interface Quotation {
   quoteDate?: string;
   expiredDate?: string;
   contractTerm?: number; // 合同限期（月）
+  serviceYears?: number; // 服务年限（年）
+  remark?: string; // 报价说明信息
   currency: string;
   status: 0 | 1 | 2 | 3; // 0初始 1报价中 2失效 3已生成合同
   quoteType?: 1 | 2 | 3 | 4; // 1询价 2报价 3标书 4框架协议
@@ -242,6 +244,7 @@ export interface QuotationProduct {
   discountPrice: string; // 售价/接口单价
   totalPrice: string; // 小计（按用量行为 0）
   cost: string;
+  gift?: boolean; // 赠送项目（折扣为0、实际单价为0）
   pricingMode?: 'qty' | 'usage'; // qty按数量 usage按用量(API接口单价,框架)
   apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（按量行，选自价目表）
 }
@@ -709,7 +712,7 @@ export interface ApiQuoteItem {
   name: string;
   price: number;      // 标准单价
   quotePrice: number; // 报价单价（可折）
-  estCalls: number;   // 预估月调用量（框架可为 0）
+  estCalls: number;   // 预估年调用量（框架可为 0）
   unit: string;
 }
 

@@ -114,6 +114,8 @@ export const mapQuotation = (r: any) => ({
   quoteDate: r.quote_date,
   expiredDate: r.expired_date,
   contractTerm: r.contract_term,
+  serviceYears: r.service_years,
+  remark: r.remark,
   currency: r.currency,
   status: r.status,
   quoteType: r.quote_type,
@@ -144,6 +146,7 @@ export const mapQuotationProduct = (r: any) => ({
   discountPrice: r.discount_price,
   totalPrice: r.total_price,
   cost: r.cost,
+  gift: r.gift ?? false,
   pricingMode: r.pricing_mode,
   apiItems: r.api_items ?? undefined, // 数据API接口报价清单
 });
