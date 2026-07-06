@@ -9,7 +9,7 @@ import type { ApiQuoteItem } from '@/types';
 
 /**
  * 数据接口报价清单选择器：从「数据产品价目表」勾选接口，
- * 每项可设报价单价（默认标准价，可折）与预估月调用量（框架可为 0）。
+ * 每项可设报价单价（默认标准价，可折）与预估年调用量（框架可为 0）。
  */
 export function ApiItemsPicker({ initial, onSave, onClose }: {
   initial: ApiQuoteItem[];
@@ -58,7 +58,7 @@ export function ApiItemsPicker({ initial, onSave, onClose }: {
         <>
           <span className="mr-auto text-sm text-text-weak">
             已选 <b className="text-text">{items.length}</b> 项
-            {estMonthly > 0 && <> · 预估月费用 <b className="text-primary">¥{estMonthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</b></>}
+            {estMonthly > 0 && <> · 预估年费用 <b className="text-primary">¥{estMonthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</b></>}
           </span>
           <Button onClick={onClose}>取消</Button>
           <Button variant="primary" onClick={() => { onSave(items); onClose(); }}>确定（{items.length} 项）</Button>
@@ -92,7 +92,7 @@ export function ApiItemsPicker({ initial, onSave, onClose }: {
         {/* 右：已选清单（报价单价 + 预估调用量） */}
         <div className="flex min-h-0 flex-col">
           <div className="mb-2 flex h-8 items-center text-xs text-text-faint">
-            已选接口 · 报价单价可低于标准价（折让体现在此），预估月调用量仅用于估费，框架按实际用量结算
+            已选接口 · 报价单价可低于标准价（折让体现在此），预估年调用量仅用于估费，框架按实际用量结算
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
             {items.length === 0 && <div className="px-3 py-6 text-center text-xs text-text-faint">从左侧勾选接口</div>}
@@ -115,14 +115,14 @@ export function ApiItemsPicker({ initial, onSave, onClose }: {
                     元/{i.unit}
                   </span>
                   <span className="flex items-center gap-1">
-                    预估月量
+                    预估年量
                     <input
                       value={String(i.estCalls)}
                       onChange={(e) => patch(i.apiCode, { estCalls: Math.max(0, Number(e.target.value) || 0) })}
                       className="h-6 w-20 rounded border border-border px-1.5 text-right tabular-nums outline-none focus:border-primary"
                     />
                   </span>
-                  {i.estCalls > 0 && <span className="ml-auto tabular-nums text-text">≈ ¥{(i.quotePrice * i.estCalls).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}/月</span>}
+                  {i.estCalls > 0 && <span className="ml-auto tabular-nums text-text">≈ ¥{(i.quotePrice * i.estCalls).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}/年</span>}
                 </div>
               </div>
             ))}

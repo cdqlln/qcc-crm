@@ -114,6 +114,8 @@ export const mapQuotation = (r: any) => ({
   quoteDate: r.quote_date,
   expiredDate: r.expired_date,
   contractTerm: r.contract_term,
+  remark: r.remark ?? undefined,
+  serviceYears: r.service_years ?? undefined,
   currency: r.currency,
   status: r.status,
   quoteType: r.quote_type,
@@ -146,6 +148,7 @@ export const mapQuotationProduct = (r: any) => ({
   cost: r.cost,
   pricingMode: r.pricing_mode,
   apiItems: r.api_items ?? undefined, // 数据API接口报价清单
+  gift: r.gift ?? false, // 赠送项目
 });
 
 export const mapContract = (r: any) => ({

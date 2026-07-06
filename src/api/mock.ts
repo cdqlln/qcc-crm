@@ -453,7 +453,7 @@ function writeMockQuoteLines(quotationId: number, lines: any[]) {
       quantity: l.quantity, price: l.price, discountRate: l.discountRate,
       discountPrice: (Number(l.price) * Number(l.discountRate)).toFixed(2),
       totalPrice: l.pricingMode === 'usage' ? '0.00' : (Number(l.price) * Number(l.discountRate) * l.quantity).toFixed(2),
-      cost: l.cost, pricingMode: l.pricingMode ?? 'qty', apiItems: l.apiItems,
+      cost: l.cost, pricingMode: l.pricingMode ?? 'qty', apiItems: l.apiItems, gift: l.gift ?? false,
     } as any);
   }
 }
@@ -481,6 +481,7 @@ export const quotationsApi = {
       quotationId: id, code: `QT${new Date().getFullYear()}${String(id).padStart(4, '0')}`, version: 1,
       name: input.name, customerId: input.customerId, customerName: cust?.name, opportunityId: input.opportunityId,
       quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm,
+      remark: input.remark, serviceYears: input.serviceYears,
       currency: input.currency ?? 'CNY', status: 0, quoteType: input.quoteType ?? 2,
       total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0', otherChargesItems: input.otherChargesItems ?? [],
       discount: input.discount ?? '0', amount: amount.toFixed(2), cost: cost.toFixed(2),
@@ -493,7 +494,7 @@ export const quotationsApi = {
   },
   update: (id: number, input: any) => {
     const q = quotations.find((x) => x.quotationId === id) as any;
-    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm });
+    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm, remark: input.remark, serviceYears: input.serviceYears });
     writeMockQuoteLines(id, input.lines ?? []);
     return delay(q);
   },
