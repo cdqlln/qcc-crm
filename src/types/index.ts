@@ -245,7 +245,8 @@ export interface QuotationProduct {
   totalPrice: string; // 小计（按用量行为 0）
   cost: string;
   pricingMode?: 'qty' | 'usage'; // qty按数量 usage按用量(API接口单价,框架)
-  apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（按量行，选自价目表）
+  apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（选自价目表）
+  apiMode?: 'calls' | 'recharge'; // 接口计费：calls=定量定价可算总价 recharge=只调价·售价=充值金额
   gift?: boolean; // 赠送项目（折扣 0、实际单价 0）
 }
 

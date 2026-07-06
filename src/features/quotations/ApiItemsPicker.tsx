@@ -8,16 +8,21 @@ import { cn } from '@/lib/cn';
 import type { ApiQuoteItem } from '@/types';
 
 /**
- * 数据接口报价清单选择器：从「数据产品价目表」勾选接口，
- * 每项可设报价单价（默认标准价，可折）与预估年调用量（框架可为 0）。
+ * 数据接口报价清单选择器：从「数据产品价目表」勾选接口。
+ * mode='calls'    定量定价：每项填 调用量×报价单价 → 合计计入报价总价
+ * mode='recharge' 只调价不定量：仅设报价单价，总价未知（行售价=充值金额）
+ * mode='est'      旧版按量行：预估年量仅供估费
  */
-export function ApiItemsPicker({ initial, onSave, onClose }: {
+export function ApiItemsPicker({ initial, mode = 'est', defaultCategory = '', onSave, onClose }: {
   initial: ApiQuoteItem[];
+  mode?: 'calls' | 'recharge' | 'est';
+  defaultCategory?: string;
   onSave: (items: ApiQuoteItem[]) => void;
   onClose: () => void;
 }) {
   const [kw, setKw] = useState('');
-  const [category, setCategory] = useState('');
+  const [category, setCategory] = useState(defaultCategory);
+  const withCalls = mode !== 'recharge'; // 是否需要量
   const [picked, setPicked] = useState<Map<string, ApiQuoteItem>>(new Map(initial.map((i) => [i.apiCode, { ...i }])));
 
   const { data: rows = [], isFetching } = useQuery({
@@ -49,19 +54,29 @@ export function ApiItemsPicker({ initial, onSave, onClose }: {
   };
 
   const items = [...picked.values()];
-  const estMonthly = items.reduce((s, i) => s + i.quotePrice * i.estCalls, 0);
+  const sum = items.reduce((s, i) => s + i.quotePrice * i.estCalls, 0);
+  const missingCalls = mode === 'calls' && items.some((i) => !(i.estCalls > 0));
+
+  const confirm = () => {
+    if (missingCalls) return; // 定量计费必须每项有量
+    onSave(mode === 'recharge' ? items.map((i) => ({ ...i, estCalls: 0 })) : items);
+    onClose();
+  };
 
   return (
     <Dialog open width="w-[860px]" onClose={onClose}
-      title={<span className="flex items-center gap-2"><DatabaseZap size={16} className="text-primary" />选择数据接口（价目表 2026）</span>}
+      title={<span className="flex items-center gap-2"><DatabaseZap size={16} className="text-primary" />选择数据接口（价目表 2026）
+        <span className="text-xs font-normal text-text-faint">{mode === 'calls' ? '定量定价 · 合计计入总价' : mode === 'recharge' ? '只调价不定量 · 售价按充值金额' : '预估年量 · 仅供估费'}</span>
+      </span>}
       footer={
         <>
           <span className="mr-auto text-sm text-text-weak">
             已选 <b className="text-text">{items.length}</b> 项
-            {estMonthly > 0 && <> · 预估年费用 <b className="text-primary">¥{estMonthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</b></>}
+            {withCalls && sum > 0 && <> · {mode === 'calls' ? '接口合计' : '预估年费用'} <b className="text-primary">¥{sum.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}</b></>}
+            {missingCalls && <span className="ml-2 text-danger">定量计费需为每个接口填写调用量</span>}
           </span>
           <Button onClick={onClose}>取消</Button>
-          <Button variant="primary" onClick={() => { onSave(items); onClose(); }}>确定（{items.length} 项）</Button>
+          <Button variant="primary" onClick={confirm} disabled={missingCalls}>确定（{items.length} 项）</Button>
         </>
       }>
       <div className="grid grid-cols-2 gap-4" style={{ height: 440 }}>
@@ -92,7 +107,9 @@ export function ApiItemsPicker({ initial, onSave, onClose }: {
         {/* 右：已选清单（报价单价 + 预估调用量） */}
         <div className="flex min-h-0 flex-col">
           <div className="mb-2 flex h-8 items-center text-xs text-text-faint">
-            已选接口 · 报价单价可低于标准价（折让体现在此），预估年调用量仅用于估费，框架按实际用量结算
+            {mode === 'calls' && '已选接口 · 每项填写 调用量 与 报价单价，合计将作为该行售价计入报价总价'}
+            {mode === 'recharge' && '已选接口 · 只调整各接口报价单价，不指定调用量；行售价请填写充值金额'}
+            {mode === 'est' && '已选接口 · 报价单价可低于标准价（折让体现在此），预估年调用量仅用于估费，框架按实际用量结算'}
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
             {items.length === 0 && <div className="px-3 py-6 text-center text-xs text-text-faint">从左侧勾选接口</div>}
@@ -114,15 +131,22 @@ export function ApiItemsPicker({ initial, onSave, onClose }: {
                     />
                     元/{i.unit}
                   </span>
-                  <span className="flex items-center gap-1">
-                    预估年量
-                    <input
-                      value={String(i.estCalls)}
-                      onChange={(e) => patch(i.apiCode, { estCalls: Math.max(0, Number(e.target.value) || 0) })}
-                      className="h-6 w-20 rounded border border-border px-1.5 text-right tabular-nums outline-none focus:border-primary"
-                    />
-                  </span>
-                  {i.estCalls > 0 && <span className="ml-auto tabular-nums text-text">≈ ¥{(i.quotePrice * i.estCalls).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}/年</span>}
+                  {withCalls && (
+                    <span className="flex items-center gap-1">
+                      {mode === 'calls' ? '调用量' : '预估年量'}
+                      <input
+                        value={String(i.estCalls)}
+                        onChange={(e) => patch(i.apiCode, { estCalls: Math.max(0, Number(e.target.value) || 0) })}
+                        className={cn('h-6 w-20 rounded border px-1.5 text-right tabular-nums outline-none focus:border-primary',
+                          mode === 'calls' && !(i.estCalls > 0) ? 'border-danger' : 'border-border')}
+                      />
+                    </span>
+                  )}
+                  {withCalls && i.estCalls > 0 && (
+                    <span className="ml-auto tabular-nums text-text">
+                      {mode === 'calls' ? `¥${(i.quotePrice * i.estCalls).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}` : `≈ ¥${(i.quotePrice * i.estCalls).toLocaleString('zh-CN', { maximumFractionDigits: 2 })}/年`}
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

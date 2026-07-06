@@ -148,6 +148,7 @@ export const mapQuotationProduct = (r: any) => ({
   cost: r.cost,
   pricingMode: r.pricing_mode,
   apiItems: r.api_items ?? undefined, // 数据API接口报价清单
+  apiMode: r.api_mode ?? undefined, // calls=定量定价 recharge=充值金额
   gift: r.gift ?? false, // 赠送项目
 });
 

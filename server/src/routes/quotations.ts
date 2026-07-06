@@ -52,7 +52,8 @@ const lineSchema = z.object({
   discountRate: z.string(),
   cost: z.string(),
   pricingMode: z.enum(['qty', 'usage']).default('qty'),
-  apiItems: z.array(apiItemSchema).max(200).optional(), // 数据API接口报价清单（按量行）
+  apiItems: z.array(apiItemSchema).max(200).optional(), // 数据API接口报价清单
+  apiMode: z.enum(['calls', 'recharge']).optional(), // 接口计费：calls=定量定价可算总价 recharge=只调价·售价=充值金额
   gift: z.boolean().default(false), // 赠送项目（折扣 0、实际单价 0）
 });
 const saveSchema = z.object({
@@ -95,10 +96,10 @@ async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
   for (const l of lines) {
     await client.query(
-      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode, api_items, gift)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode, api_items, api_mode, gift)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
       [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.gift ? '0' : l.discountRate, l.cost,
-       l.pricingMode ?? 'qty', l.apiItems?.length ? JSON.stringify(l.apiItems) : null, l.gift ?? false],
+       l.pricingMode ?? 'qty', l.apiItems?.length ? JSON.stringify(l.apiItems) : null, l.apiMode ?? null, l.gift ?? false],
     );
   }
   // 行项目维护 total / cost（amount 等为生成列自动派生）
