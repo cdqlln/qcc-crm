@@ -56,6 +56,8 @@ export const mapContact = (r: any) => ({
   sourceLeadsId: r.source_leads_id,
   remark: r.remark,
   wecomExternalUserid: r.wecom_external_userid,
+  isKp: r.is_kp ?? false,
+  orgNodeId: r.org_node_id != null ? Number(r.org_node_id) : undefined,
 });
 
 export const mapTracking = (r: any) => ({
@@ -114,6 +116,8 @@ export const mapQuotation = (r: any) => ({
   quoteDate: r.quote_date,
   expiredDate: r.expired_date,
   contractTerm: r.contract_term,
+  remark: r.remark ?? undefined,
+  serviceYears: r.service_years ?? undefined,
   currency: r.currency,
   status: r.status,
   quoteType: r.quote_type,
@@ -146,6 +150,8 @@ export const mapQuotationProduct = (r: any) => ({
   cost: r.cost,
   pricingMode: r.pricing_mode,
   apiItems: r.api_items ?? undefined, // 数据API接口报价清单
+  apiMode: r.api_mode ?? undefined, // calls=定量定价 recharge=充值金额
+  gift: r.gift ?? false, // 赠送项目
 });
 
 export const mapContract = (r: any) => ({

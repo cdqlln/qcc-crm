@@ -92,6 +92,7 @@ leadsRouter.post(
     const { orgId, userId } = ctx(req);
     const lead = await one<any>(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
     if (!lead) return fail(res, '线索不存在', 1, 404);
+    if (lead.converted_at) return fail(res, '该线索已转化并关联客户，如需重新转化请先在「已转化」中解除关联');
     if (lead.category > 2) return fail(res, '该记录已是客户，无需再次转化');
     const snapshot = await buildLeadSnapshot(orgId, lead);
     const row = await one(
@@ -103,6 +104,32 @@ leadsRouter.post(
     ok(res, mapCustomer(row));
   }),
 );
+
+// 解除转化关联：客户名下无业务单据时，把记录退回线索（可重新转化）
+leadsRouter.post('/leads/:id/unlink', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const c = await one<any>(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+  if (!c) return fail(res, '记录不存在', 1, 404);
+  if (!c.converted_at) return fail(res, '该线索未转化，无需解除关联');
+  const biz = await one<any>(
+    `SELECT
+       (SELECT count(*) FROM opportunity WHERE customer_id=$1 AND active=1) AS opp,
+       (SELECT count(*) FROM quotation WHERE customer_id=$1) AS quo,
+       (SELECT count(*) FROM contract WHERE customer_id=$1) AS ct`,
+    [c.customer_id],
+  );
+  const opp = Number(biz?.opp ?? 0), quo = Number(biz?.quo ?? 0), ct = Number(biz?.ct ?? 0);
+  if (opp + quo + ct > 0) {
+    return fail(res, `客户名下已有业务单据（商机 ${opp} / 报价 ${quo} / 合同 ${ct}），不能解除关联；请先处理相关单据`);
+  }
+  const row = await one(
+    `UPDATE customer SET category=1, status_term_id=16,
+       converted_at=NULL, converted_by=NULL, lead_snapshot=NULL, group_id=NULL
+     WHERE customer_id=$1 RETURNING *`,
+    [c.customer_id],
+  );
+  ok(res, mapCustomer(row));
+}));
 
 const createSchema = z.object({
   name: z.string().min(2),
@@ -218,6 +245,8 @@ leadsRouter.post('/leads/:id/to-opportunity', ah(async (req, res) => {
   const { orgId, userId } = ctx(req);
   const c = await one<any>(`SELECT * FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
   if (!c) return fail(res, '线索不存在', 1, 404);
+  // 已转化线索需先解除关联才能再转（避免重复转化产生歧义链路）
+  if (c.converted_at) return fail(res, '该线索已转化并关联客户，如需再转商机请先在「已转化」中解除关联');
   // 首次从线索侧转化时记录留痕（已是客户的复用记录不覆盖）
   const snapshot = c.category <= 2 && !c.converted_at ? await buildLeadSnapshot(orgId, c) : null;
   await one(

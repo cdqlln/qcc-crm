@@ -86,12 +86,27 @@ export const leadsApi = {
   convert: (id: number) => {
     const c = customers.find((x) => x.customerId === id);
     if (c) {
+      if (c.convertedAt) return Promise.reject(new Error('该线索已转化并关联客户，如需重新转化请先在「已转化」中解除关联'));
       if (c.category > 2) return Promise.reject(new Error('该记录已是客户，无需再次转化'));
       markConverted(c);
       c.category = 3;
       c.currentTrackingStatus = 8;
     }
     return delay(c);
+  },
+  // 解除转化关联：客户名下无业务单据时退回线索，可重新转化
+  unlink: (id: number) => {
+    const c = customers.find((x) => x.customerId === id);
+    if (!c) return Promise.reject(new Error('记录不存在'));
+    if (!c.convertedAt) return Promise.reject(new Error('该线索未转化，无需解除关联'));
+    const opp = opportunities.filter((o) => o.customerId === id && o.active === 1).length;
+    const quo = quotations.filter((q) => q.customerId === id).length;
+    const ct = contracts.filter((x) => x.customerId === id).length;
+    if (opp + quo + ct > 0)
+      return Promise.reject(new Error(`客户名下已有业务单据（商机 ${opp} / 报价 ${quo} / 合同 ${ct}），不能解除关联；请先处理相关单据`));
+    c.category = 1; c.currentTrackingStatus = 16;
+    c.convertedAt = undefined; c.convertedBy = undefined; c.leadSnapshot = undefined; c.groupId = null; c.groupName = undefined;
+    return delay({ ...c });
   },
   create: (input: Partial<Customer>) => {
     const row: Customer = {
@@ -143,6 +158,7 @@ export const leadsApi = {
   },
   toOpportunity: (id: number, input?: { name?: string; estimatedAmount?: string }) => {
     const c = customers.find((x) => x.customerId === id);
+    if (c?.convertedAt) return Promise.reject(new Error('该线索已转化并关联客户，如需再转商机请先在「已转化」中解除关联'));
     if (c) {
       if (c.category <= 2) markConverted(c); // 首次从线索侧转化时留痕
       c.category = 3; c.currentTrackingStatus = 17; c.opportunityCount = (c.opportunityCount ?? 0) + 1;
@@ -270,6 +286,10 @@ function buildMockInsight(customerId: number): import('@/types').CustomerInsight
   return { reportId: ++mockReportId, createdAt: dayjs().toISOString(), facts, insight, generatedBy: 'rules' };
 }
 
+// 客户组织结构（Mock 内存）
+const custOrgNodes: import('@/types').CustomerOrgNode[] = [];
+let orgNodeSeq = 7000;
+
 // ---------- 客户 §6.3 ----------
 export const customersApi = {
   list: (p: ListParams) => {
@@ -358,6 +378,31 @@ export const customersApi = {
     return delay(Object.values(byProduct));
   },
   transfer: (_customerId: number, _toUserId: number, _reason: string) => delay({ status: 2 }),
+  // ---- 客户组织结构（内存 Mock） ----
+  orgNodes: (customerId: number) => delay(custOrgNodes.filter((n) => n.customerId === customerId)),
+  createOrgNode: (customerId: number, input: { name: string; parentId?: number | null }) => {
+    const row: import('@/types').CustomerOrgNode = {
+      nodeId: ++orgNodeSeq, customerId, parentId: input.parentId ?? null, name: input.name, order: custOrgNodes.length,
+    };
+    custOrgNodes.push(row);
+    return delay(row);
+  },
+  renameOrgNode: (nodeId: number, name: string) => {
+    const n = custOrgNodes.find((x) => x.nodeId === nodeId);
+    if (n) n.name = name;
+    return delay({ ok: true });
+  },
+  removeOrgNode: (nodeId: number) => {
+    const drop = new Set<number>([nodeId]);
+    let grew = true;
+    while (grew) { // 级联子节点
+      grew = false;
+      for (const n of custOrgNodes) if (n.parentId != null && drop.has(n.parentId) && !drop.has(n.nodeId)) { drop.add(n.nodeId); grew = true; }
+    }
+    for (let i = custOrgNodes.length - 1; i >= 0; i--) if (drop.has(custOrgNodes[i].nodeId)) custOrgNodes.splice(i, 1);
+    contacts.forEach((c) => { if (c.orgNodeId && drop.has(c.orgNodeId)) c.orgNodeId = undefined; });
+    return delay({ ok: true });
+  },
   update: (id: number, input: Partial<Customer>) => {
     const c = customers.find((x) => x.customerId === id);
     if (!c) return Promise.reject(new Error('客户不存在'));
@@ -453,7 +498,7 @@ function writeMockQuoteLines(quotationId: number, lines: any[]) {
       quantity: l.quantity, price: l.price, discountRate: l.discountRate,
       discountPrice: (Number(l.price) * Number(l.discountRate)).toFixed(2),
       totalPrice: l.pricingMode === 'usage' ? '0.00' : (Number(l.price) * Number(l.discountRate) * l.quantity).toFixed(2),
-      cost: l.cost, pricingMode: l.pricingMode ?? 'qty', apiItems: l.apiItems,
+      cost: l.cost, pricingMode: l.pricingMode ?? 'qty', apiItems: l.apiItems, gift: l.gift ?? false,
     } as any);
   }
 }
@@ -481,6 +526,7 @@ export const quotationsApi = {
       quotationId: id, code: `QT${new Date().getFullYear()}${String(id).padStart(4, '0')}`, version: 1,
       name: input.name, customerId: input.customerId, customerName: cust?.name, opportunityId: input.opportunityId,
       quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm,
+      remark: input.remark, serviceYears: input.serviceYears,
       currency: input.currency ?? 'CNY', status: 0, quoteType: input.quoteType ?? 2,
       total: total.toFixed(2), orderDiscountRate: input.orderDiscountRate ?? '1.00', otherCharges: input.otherCharges ?? '0', otherChargesItems: input.otherChargesItems ?? [],
       discount: input.discount ?? '0', amount: amount.toFixed(2), cost: cost.toFixed(2),
@@ -493,7 +539,7 @@ export const quotationsApi = {
   },
   update: (id: number, input: any) => {
     const q = quotations.find((x) => x.quotationId === id) as any;
-    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm });
+    if (q) Object.assign(q, { name: input.name, quoteType: input.quoteType, orderDiscountRate: input.orderDiscountRate, otherCharges: input.otherCharges, otherChargesItems: input.otherChargesItems, discount: input.discount, opportunityId: input.opportunityId, quoteDate: input.quoteDate, expiredDate: input.expiredDate, contractTerm: input.contractTerm, remark: input.remark, serviceYears: input.serviceYears });
     writeMockQuoteLines(id, input.lines ?? []);
     return delay(q);
   },

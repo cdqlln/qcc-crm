@@ -78,6 +78,7 @@ export const leadsApi = {
   list: (p: ListParams) => list<Customer>('/leads/list', p),
   get: (id: number) => get<Customer>(`/leads/${id}`),
   convert: (id: number) => post<Customer>(`/leads/${id}/convert`),
+  unlink: (id: number) => post<Customer>(`/leads/${id}/unlink`),
   create: (input: Partial<Customer>) => post<Customer>('/leads', input),
   update: (id: number, input: Partial<Customer>) => put<Customer>(`/leads/${id}`, input),
   claim: (ids: number[]) => post<Customer[]>('/leads/claim', { ids }),
@@ -113,6 +114,11 @@ export const customersApi = {
     ),
   transfer: (customerId: number, toUserId: number, reason: string) =>
     post<{ status: number }>(`/customers/${customerId}/transfer`, { toUserId, reason }),
+  orgNodes: (customerId: number) => get<import('@/types').CustomerOrgNode[]>(`/customers/${customerId}/org-nodes`),
+  createOrgNode: (customerId: number, input: { name: string; parentId?: number | null }) =>
+    post<import('@/types').CustomerOrgNode>(`/customers/${customerId}/org-nodes`, input),
+  renameOrgNode: (nodeId: number, name: string) => put(`/org-nodes/${nodeId}`, { name }),
+  removeOrgNode: (nodeId: number) => req(`/org-nodes/${nodeId}`, { method: 'DELETE' }),
   insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
   generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),
 };
@@ -200,6 +206,17 @@ export const apiPricesApi = {
   create: (input: Partial<import('@/types').ApiPrice>) => post<{ apiPriceId: number }>('/api-prices', input),
   update: (id: number, input: Partial<import('@/types').ApiPrice>) => put(`/api-prices/${id}`, input),
   remove: (id: number) => req(`/api-prices/${id}`, { method: 'DELETE' }),
+  history: () => get<import('@/types').ApiPriceHistory[]>('/api-prices/history'),
+  itemHistory: (id: number) => get<import('@/types').ApiPriceHistory[]>(`/api-prices/${id}/history`),
+  importFile: async (file: File): Promise<import('@/types').ApiPriceImportResult> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`${BASE}/api/crm/api-prices/import`, { method: 'POST', headers: { ...authHeaders() }, body: fd });
+    if (res.status === 401) { authStore.clearAndRedirect(); throw new Error('未登录'); }
+    const body = (await res.json()) as { code: number; msg: string; data: import('@/types').ApiPriceImportResult };
+    if (body.code !== 0) throw new Error(body.msg || '导入失败');
+    return body.data;
+  },
 };
 
 export const usersApi = {

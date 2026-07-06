@@ -65,10 +65,25 @@ export function LeadsPage() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ['leads'] });
   const convert = async (rows: Customer[]) => {
-    await leadsApi.claim(rows.map((r) => r.customerId)).catch(() => {});
-    await Promise.all(rows.map((r) => leadsApi.convert(r.customerId)));
-    refresh();
-    toast(`已将 ${rows.length} 条线索转为客户，并保留跟进记录`, 'success');
+    try {
+      await leadsApi.claim(rows.map((r) => r.customerId)).catch(() => {});
+      await Promise.all(rows.map((r) => leadsApi.convert(r.customerId)));
+      refresh();
+      toast(`已将 ${rows.length} 条线索转为客户，并保留跟进记录`, 'success');
+    } catch (e) {
+      refresh();
+      toast(e instanceof Error ? e.message : '转化失败', 'error');
+    }
+  };
+  // 解除转化关联（已转化页签）：客户名下无业务单据时退回线索，可重新转化
+  const unlink = async (r: Customer) => {
+    try {
+      await leadsApi.unlink(r.customerId);
+      refresh();
+      toast(`已解除「${r.name}」的转化关联，记录退回线索，可重新转化`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : '解除失败', 'error');
+    }
   };
   const runIds = async (fn: (ids: number[]) => Promise<unknown>, rows: Customer[], msg: string) => {
     await fn(rows.map((r) => r.customerId));
@@ -94,6 +109,18 @@ export function LeadsPage() {
     { key: 'trackingUpdateDate', header: '最新跟进', numeric: true, sortable: true, render: (r) => (
       <span className="text-text-weak">{formatDate(r.trackingUpdateDate)}</span>
     ) },
+    // 已转化页签：便捷跳转所转客户 + 解除关联（解除后方可重新转化）
+    ...(q.tab === 'converted'
+      ? [{
+          key: 'convertedActions', header: '关联客户', render: (r: Customer) => (
+            <span className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <span className="text-xs text-text-faint">{formatDate(r.convertedAt)} 转化</span>
+              <button onClick={() => navigate(`/customers/${r.customerId}`)} className="text-xs text-primary hover:underline">查看客户 ↗</button>
+              <button onClick={() => unlink(r)} className="text-xs text-text-faint hover:text-danger" title="客户名下无业务单据时可解除，解除后可重新转化">解除关联</button>
+            </span>
+          ),
+        } as Column<Customer>]
+      : []),
   ];
 
   return (
@@ -142,7 +169,10 @@ export function LeadsPage() {
           { label: '领取', icon: <UserCheck size={13} />, onClick: (rows) => runIds(leadsApi.claim, rows, `已领取 ${rows.length} 条线索`) },
           { label: '分配', icon: <UserCog size={13} />, onClick: (rows) => setAssignRows(rows) },
           { label: '转客户', icon: <ArrowRightLeft size={13} />, onClick: convert },
-          { label: '转商机', icon: <Briefcase size={13} />, onClick: async (rows) => { for (const r of rows) await leadsApi.toOpportunity(r.customerId); refresh(); toast(`已为 ${rows.length} 条线索创建商机`, 'success'); } },
+          { label: '转商机', icon: <Briefcase size={13} />, onClick: async (rows) => {
+            try { for (const r of rows) await leadsApi.toOpportunity(r.customerId); refresh(); toast(`已为 ${rows.length} 条线索创建商机`, 'success'); }
+            catch (e) { refresh(); toast(e instanceof Error ? e.message : '转商机失败', 'error'); }
+          } },
           { label: '退回线索池', icon: <Undo2 size={13} />, onClick: (rows) => runIds(leadsApi.returnPool, rows, `已退回 ${rows.length} 条到线索池`) },
           { label: '拒绝', icon: <Ban size={13} />, danger: true, onClick: (rows) => runIds(leadsApi.reject, rows, `已拒绝 ${rows.length} 条线索`) },
         ]}

@@ -48,7 +48,7 @@ const PROVINCES: [string, string, string][] = [
   ['北京市', '北京市', '海淀区'],
   ['四川省', '成都市', '高新区'],
 ];
-const PRODUCT_NAMES = ['企业查询专业版', '风险监控服务', '尽调报告(单次)', '数据API套餐', '海外KYC服务', '大数据风控引擎', '招投标监控', '知识产权监测'];
+const PRODUCT_NAMES = ['企业查询专业版', '风险监控服务', '尽调报告(单次)', '数据API套餐（按接口）', '海外KYC服务', '大数据风控引擎', '招投标监控', '知识产权监测', '数据API套餐（按企业户）'];
 
 function companyName(): string {
   return pick(COMPANY_PREFIX) + pick(COMPANY_PREFIX) + pick(COMPANY_SUFFIX);
@@ -57,7 +57,7 @@ function companyName(): string {
 // ---------- 产品 §6.8 ----------
 // 大类/交付：1数据 2产品；交付 1API 2离线数据包 3账号 4订阅（与 DB seed 对齐）
 const PRODUCT_META: [1 | 2, 1 | 2 | 3 | 4][] = [
-  [2, 3], [2, 4], [1, 2], [1, 1], [1, 1], [2, 4], [2, 4], [1, 1],
+  [2, 3], [2, 4], [1, 2], [1, 1], [1, 1], [2, 4], [2, 4], [1, 1], [1, 1],
 ];
 export const products: Product[] = PRODUCT_NAMES.map((name, i) => {
   const [kind, deliveryType] = PRODUCT_META[i] ?? [2, 3];

@@ -94,6 +94,8 @@ const contactSchema = z.object({
   remark: z.string().optional(),
   type: z.coerce.number().int().min(1).max(2).default(2),
   wecomExternalUserid: z.string().optional(),
+  isKp: z.boolean().optional(),                         // KP 关键人标志
+  orgNodeId: z.coerce.number().int().positive().nullish(), // 所属客户组织节点
 });
 
 // 新增联系人
@@ -103,9 +105,9 @@ customersRouter.post('/customers/:id/contacts', ah(async (req, res) => {
   const cid = Number(req.params.id);
   if (d.type === 1) await one(`UPDATE contact SET type=2 WHERE customer_id=$1 AND type=1`, [cid]); // 主联系人唯一
   const row = await one(
-    `INSERT INTO contact (organization_id, customer_id, name, phone, email, wechat, position, department, remark, type, wecom_external_userid)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-    [orgId, cid, d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null],
+    `INSERT INTO contact (organization_id, customer_id, name, phone, email, wechat, position, department, remark, type, wecom_external_userid, is_kp, org_node_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+    [orgId, cid, d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null, d.isKp ?? false, d.orgNodeId ?? null],
   );
   ok(res, mapContact(row));
 }));
@@ -117,15 +119,63 @@ customersRouter.put('/contacts/:id', ah(async (req, res) => {
   if (!cur) return fail(res, '联系人不存在', 1, 404);
   if (d.type === 1) await one(`UPDATE contact SET type=2 WHERE customer_id=$1 AND type=1 AND contact_id<>$2`, [cur.customer_id, req.params.id]);
   const row = await one(
-    `UPDATE contact SET name=$1, phone=$2, email=$3, wechat=$4, position=$5, department=$6, remark=$7, type=$8, wecom_external_userid=$9
+    `UPDATE contact SET name=$1, phone=$2, email=$3, wechat=$4, position=$5, department=$6, remark=$7, type=$8, wecom_external_userid=$9,
+       is_kp=COALESCE($11, is_kp), org_node_id=$12
      WHERE contact_id=$10 RETURNING *`,
-    [d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null, req.params.id],
+    [d.name, d.phone ?? null, d.email ?? null, d.wechat ?? null, d.position ?? null, d.department ?? null, d.remark ?? null, d.type, d.wecomExternalUserid ?? null, req.params.id, d.isKp ?? null, d.orgNodeId ?? null],
   );
   ok(res, mapContact(row));
 }));
 
 customersRouter.delete('/contacts/:id', ah(async (req, res) => {
   await one(`DELETE FROM contact WHERE contact_id=$1`, [req.params.id]);
+  ok(res, { ok: true });
+}));
+
+// ---------- 客户组织结构（销售调研收集；联系人可挂节点） ----------
+const mapOrgNode = (r: any) => ({
+  nodeId: Number(r.node_id), customerId: Number(r.customer_id),
+  parentId: r.parent_id != null ? Number(r.parent_id) : null, name: r.name, order: r.sort_order,
+});
+
+customersRouter.get('/customers/:id/org-nodes', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const rows = await query(
+    `SELECT * FROM customer_org_node WHERE organization_id=$1 AND customer_id=$2 ORDER BY parent_id NULLS FIRST, sort_order, node_id`,
+    [orgId, req.params.id],
+  );
+  ok(res, rows.map(mapOrgNode));
+}));
+
+customersRouter.post('/customers/:id/org-nodes', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const name = String(req.body?.name ?? '').trim();
+  if (!name) return fail(res, '请填写部门/组织名称');
+  const parentId = req.body?.parentId ? Number(req.body.parentId) : null;
+  const row = await one<any>(
+    `INSERT INTO customer_org_node (organization_id, customer_id, parent_id, name, sort_order)
+     VALUES ($1,$2,$3,$4, COALESCE((SELECT MAX(sort_order)+1 FROM customer_org_node WHERE customer_id=$2 AND parent_id IS NOT DISTINCT FROM $3),0))
+     RETURNING *`,
+    [orgId, req.params.id, parentId, name.slice(0, 80)],
+  );
+  ok(res, mapOrgNode(row));
+}));
+
+customersRouter.put('/org-nodes/:id', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const name = String(req.body?.name ?? '').trim();
+  if (!name) return fail(res, '请填写名称');
+  const row = await one(`UPDATE customer_org_node SET name=$1 WHERE node_id=$2 AND organization_id=$3 RETURNING *`,
+    [name.slice(0, 80), req.params.id, orgId]);
+  if (!row) return fail(res, '节点不存在', 1, 404);
+  ok(res, mapOrgNode(row));
+}));
+
+customersRouter.delete('/org-nodes/:id', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  // 子节点级联删除（表定义 ON DELETE CASCADE）；联系人仅解挂（SET NULL）
+  const row = await one(`DELETE FROM customer_org_node WHERE node_id=$1 AND organization_id=$2 RETURNING node_id`, [req.params.id, orgId]);
+  if (!row) return fail(res, '节点不存在', 1, 404);
   ok(res, { ok: true });
 }));
 

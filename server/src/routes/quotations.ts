@@ -52,7 +52,9 @@ const lineSchema = z.object({
   discountRate: z.string(),
   cost: z.string(),
   pricingMode: z.enum(['qty', 'usage']).default('qty'),
-  apiItems: z.array(apiItemSchema).max(200).optional(), // 数据API接口报价清单（按量行）
+  apiItems: z.array(apiItemSchema).max(200).optional(), // 数据API接口报价清单
+  apiMode: z.enum(['calls', 'recharge']).optional(), // 接口计费：calls=定量定价可算总价 recharge=只调价·售价=充值金额
+  gift: z.boolean().default(false), // 赠送项目（折扣 0、实际单价 0）
 });
 const saveSchema = z.object({
   name: z.string().min(1),
@@ -69,8 +71,19 @@ const saveSchema = z.object({
   quoteDate: z.string().optional(),
   expiredDate: z.string().optional(),
   contractTerm: z.coerce.number().int().optional(),
+  remark: z.string().max(2000).optional(),          // 报价说明
+  serviceYears: z.coerce.number().int().min(0).max(50).optional(), // 服务年限（年）
   lines: z.array(lineSchema).default([]),
 });
+
+// 报价有效期不得早于当前日期（服务端兜底，前端已有快捷项与拦截）
+function expiredDateInvalid(d: { expiredDate?: string; quoteDate?: string }): string | null {
+  if (!d.expiredDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  if (d.expiredDate < today) return '报价有效期不能早于当前日期';
+  if (d.quoteDate && d.expiredDate < d.quoteDate) return '报价有效期不能早于报价日期';
+  return null;
+}
 
 // 其他费用合计：有明细则取明细之和，否则用传入的合计
 function otherChargesSum(d: { otherChargesItems?: { amount: number }[]; otherCharges: string }): string {
@@ -83,10 +96,10 @@ async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
   for (const l of lines) {
     await client.query(
-      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode, api_items)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.discountRate, l.cost, l.pricingMode ?? 'qty',
-       l.apiItems?.length ? JSON.stringify(l.apiItems) : null],
+      `INSERT INTO quotation_product (quotation_id, product_id, spec, quantity, price, discount_rate, cost, pricing_mode, api_items, api_mode, gift)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [quotationId, l.productId, l.spec ?? null, l.quantity, l.price, l.gift ? '0' : l.discountRate, l.cost,
+       l.pricingMode ?? 'qty', l.apiItems?.length ? JSON.stringify(l.apiItems) : null, l.apiMode ?? null, l.gift ?? false],
     );
   }
   // 行项目维护 total / cost（amount 等为生成列自动派生）
@@ -106,6 +119,8 @@ quotationsRouter.post(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
+    const dateErr = expiredDateInvalid(d);
+    if (dateErr) return fail(res, dateErr);
     // 数据范围校验：销售只能为自归属（可见范围内）的客户建报价
     const scope = await dataScopeCond(req, 'leader_id');
     const own = await one(`SELECT 1 FROM customer WHERE customer_id=$1 AND organization_id=$2 ${scope ? 'AND ' + scope : ''}`, [d.customerId, orgId]);
@@ -117,10 +132,11 @@ quotationsRouter.post(
       const q = (await c.query(
         `INSERT INTO quotation (organization_id, code, version, name, customer_id, group_id, contact_id, opportunity_id,
            quote_type, currency, status, order_discount_rate, other_charges, other_charges_items, discount,
-           quote_date, expired_date, contract_term, approval)
-         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14,$15,$16,-1) RETURNING quotation_id`,
+           quote_date, expired_date, contract_term, remark, service_years, approval)
+         VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8,$9,0,$10,$11,$12,$13,$14,$15,$16,$17,$18,-1) RETURNING quotation_id`,
         [orgId, code, d.name, d.customerId, d.groupId ?? null, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency,
-         d.orderDiscountRate, oc, JSON.stringify(d.otherChargesItems ?? []), d.discount, d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null],
+         d.orderDiscountRate, oc, JSON.stringify(d.otherChargesItems ?? []), d.discount, d.quoteDate ?? null, d.expiredDate ?? null,
+         d.contractTerm ?? null, d.remark ?? null, d.serviceYears ?? null],
       )).rows[0];
       await writeLines(c, q.quotation_id, d.lines);
       return q.quotation_id;
@@ -138,15 +154,19 @@ quotationsRouter.put(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
+    const dateErr = expiredDateInvalid(d);
+    if (dateErr) return fail(res, dateErr);
     const exists = await one(`SELECT quotation_id FROM quotation WHERE quotation_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
     if (!exists) return fail(res, '报价单不存在', 1, 404);
     await tx(async (c) => {
       await c.query(
         `UPDATE quotation SET name=$1, customer_id=$2, contact_id=$3, opportunity_id=$4, quote_type=$5,
            currency=$6, order_discount_rate=$7, other_charges=$8, discount=$9,
-           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14, group_id=$15 WHERE quotation_id=$10`,
+           quote_date=$11, expired_date=$12, contract_term=$13, other_charges_items=$14, group_id=$15,
+           remark=$16, service_years=$17 WHERE quotation_id=$10`,
         [d.name, d.customerId, d.contactId ?? null, d.opportunityId ?? null, d.quoteType, d.currency, d.orderDiscountRate, otherChargesSum(d), d.discount, req.params.id,
-         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? []), d.groupId ?? null],
+         d.quoteDate ?? null, d.expiredDate ?? null, d.contractTerm ?? null, JSON.stringify(d.otherChargesItems ?? []), d.groupId ?? null,
+         d.remark ?? null, d.serviceYears ?? null],
       );
       await writeLines(c, Number(req.params.id), d.lines);
     });

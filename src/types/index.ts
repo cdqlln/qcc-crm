@@ -125,6 +125,17 @@ export interface Contact {
   sourceLeadsId?: number;
   remark?: string;
   wecomExternalUserid?: string;
+  isKp?: boolean; // KP 关键人标志
+  orgNodeId?: number; // 所属客户组织节点
+}
+
+/** 客户内部组织结构节点（销售调研收集） */
+export interface CustomerOrgNode {
+  nodeId: number;
+  customerId: number;
+  parentId: number | null;
+  name: string;
+  order: number;
 }
 
 export interface Attachment {
@@ -207,6 +218,8 @@ export interface Quotation {
   quoteDate?: string;
   expiredDate?: string;
   contractTerm?: number; // 合同限期（月）
+  remark?: string; // 报价说明
+  serviceYears?: number; // 服务年限（年）
   currency: string;
   status: 0 | 1 | 2 | 3; // 0初始 1报价中 2失效 3已生成合同
   quoteType?: 1 | 2 | 3 | 4; // 1询价 2报价 3标书 4框架协议
@@ -243,7 +256,9 @@ export interface QuotationProduct {
   totalPrice: string; // 小计（按用量行为 0）
   cost: string;
   pricingMode?: 'qty' | 'usage'; // qty按数量 usage按用量(API接口单价,框架)
-  apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（按量行，选自价目表）
+  apiItems?: ApiQuoteItem[]; // 数据API接口报价清单（选自价目表）
+  apiMode?: 'calls' | 'recharge'; // 接口计费：calls=定量定价可算总价 recharge=只调价·售价=充值金额
+  gift?: boolean; // 赠送项目（折扣 0、实际单价 0）
 }
 
 export interface Contract {
@@ -709,6 +724,29 @@ export interface ApiQuoteItem {
   name: string;
   price: number;      // 标准单价
   quotePrice: number; // 报价单价（可折）
-  estCalls: number;   // 预估月调用量（框架可为 0）
+  estCalls: number;   // 预估年调用量（框架可为 0）
   unit: string;
+}
+
+/** 价目表调价记录（手工改价/文件导入） */
+export interface ApiPriceHistory {
+  historyId: number;
+  apiPriceId: number | null;
+  apiCode: string;
+  name: string;
+  oldPrice: number | null; // null=新增条目
+  newPrice: number;
+  source: 'manual' | 'import';
+  changedBy?: number;
+  changedByName: string;
+  createDate: string;
+}
+/** 价目表导入结果 */
+export interface ApiPriceImportResult {
+  total: number;
+  inserted: number;
+  priceChanged: number;
+  unchanged: number;
+  changes: { apiCode: string; name: string; oldPrice: number; newPrice: number }[];
+  fileName: string;
 }

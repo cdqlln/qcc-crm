@@ -10,6 +10,7 @@ import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { CompanyNameInput } from '@/components/ui/CompanyNameInput';
 import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
+import { RegionSelect } from '@/components/ui/RegionSelect';
 import { useCreate, type CreatableEntity } from '@/store/create';
 import { useUI } from '@/store/ui';
 import { useAuth } from '@/store/auth';
@@ -173,11 +174,12 @@ function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="联系人" error={errors.phoneName?.message}>
           <TextInput placeholder="如：王经理" {...register('phoneName')} />
         </Field>
-        <Field label="省份" error={errors.province?.message}>
-          <TextInput placeholder="如：江苏省" {...register('province')} />
-        </Field>
-        <Field label="城市" error={errors.city?.message}>
-          <TextInput placeholder="如：苏州市" {...register('city')} />
+        <Field label="所在地区" error={(errors.province?.message ?? errors.city?.message) as string} className="col-span-2" hint="省市联动，也可直接输入">
+          <RegionSelect
+            province={watch('province') ?? ''}
+            city={watch('city') ?? ''}
+            onChange={(p, c) => { setValue('province', p); setValue('city', c); }}
+          />
         </Field>
         <Field label="联系电话" error={errors.phone?.message}>
           <TextInput placeholder="手机号" {...register('phone')} />
