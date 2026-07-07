@@ -90,7 +90,12 @@ export interface Customer {
   convertedAt?: string; // 线索转化时间（有值=由线索转化而来）
   convertedBy?: number;
   leadSnapshot?: LeadSnapshot; // 转化那一刻的线索原貌
+  riskTags?: RiskTag[]; // 工商风险标签（企查查真实核查缓存）
+  riskCheckedAt?: string;
 }
+
+/** 工商风险标签（企查查核查结果） */
+export interface RiskTag { label: string; kind: 'success' | 'warning' | 'danger' | 'neutral' }
 
 /** 线索池进展总览（销售管理） */
 export interface PoolOverview {

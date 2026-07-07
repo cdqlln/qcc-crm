@@ -42,5 +42,18 @@ export const REGIONS: Region[] = [
 ];
 
 export const PROVINCES = REGIONS.map((r) => r.province);
+
+/** 从工商注册地址解析省/市（如「江苏省苏州市工业园区…」）；解析不出返回空串，交由人工填写 */
+export function parseRegion(address?: string): { province: string; city: string } {
+  if (!address) return { province: '', city: '' };
+  for (const r of REGIONS) {
+    const short = r.province.replace(/(省|市|壮族自治区|回族自治区|维吾尔自治区|自治区|特别行政区)$/, '');
+    if (address.includes(short)) {
+      const city = r.cities.find((c) => address.includes(c.replace(/市$/, ''))) ?? (r.cities.length === 1 ? r.cities[0] : '');
+      return { province: r.province, city };
+    }
+  }
+  return { province: '', city: '' };
+}
 export const citiesOf = (province?: string): string[] =>
   REGIONS.find((r) => r.province === province || (province && r.province.startsWith(province)))?.cities ?? [];

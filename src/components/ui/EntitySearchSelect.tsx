@@ -100,7 +100,7 @@ export function EntitySearchSelect({
         source: 6, // 企查查导入
         leaderId: user.userId,
       } as any);
-      toast(`已建档客户「${c.name}」${created.groupId ? '并归属集团' : ''}`, 'success');
+      toast(`已建档客户「${c.name}」${created.groupName ? `，自动归集到「${created.groupName}」（详情页可取消）` : ''}`, 'success');
       pick(created.customerId, created.name);
     } catch (e) {
       toast(e instanceof Error ? e.message : '建档失败', 'error');

@@ -387,8 +387,11 @@ export const customersApi = {
     return delay(row);
   },
   // 工商数据必须来自真实企查查 API，Mock 模式不捏造 → enabled:false（前端隐藏工商候选段）
-  companySearch: (_kw: string): Promise<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }> =>
+  companySearch: (_kw: string): Promise<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string; address?: string }[] }> =>
     delay({ enabled: false, list: [] }),
+  // 风险核查必须走真实企查查 API，Mock 不臆造
+  riskScan: (_customerId: number): Promise<{ tags: import('@/types').RiskTag[]; checkedAt: string }> =>
+    Promise.reject(new Error('未配置企查查凭据，无法核查工商风险（设置→集成配置）')),
   lastQuotePrices: (customerId: number) => {
     const qids = new Set(quotations.filter((q) => q.customerId === customerId).map((q) => q.quotationId));
     const byProduct: Record<number, any> = {};

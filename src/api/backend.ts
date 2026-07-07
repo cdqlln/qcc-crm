@@ -106,7 +106,7 @@ export const customersApi = {
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
   update: (id: number, input: Partial<Customer>) => put<Customer>(`/customers/${id}`, input),
   companySearch: (kw: string) =>
-    get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }>(
+    get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string; address?: string }[] }>(
       `/company-search?kw=${encodeURIComponent(kw)}`,
     ),
   lastQuotePrices: (customerId: number) =>
@@ -120,6 +120,7 @@ export const customersApi = {
     post<import('@/types').CustomerOrgNode>(`/customers/${customerId}/org-nodes`, input),
   renameOrgNode: (nodeId: number, name: string) => put(`/org-nodes/${nodeId}`, { name }),
   removeOrgNode: (nodeId: number) => req(`/org-nodes/${nodeId}`, { method: 'DELETE' }),
+  riskScan: (customerId: number) => post<{ tags: import('@/types').RiskTag[]; checkedAt: string }>(`/customers/${customerId}/risk-scan`),
   insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
   generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),
 };

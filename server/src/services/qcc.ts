@@ -66,6 +66,57 @@ export async function fuzzySearch(orgId: number, searchKey: string, pageIndex = 
   }
 }
 
+/** 通用计数核查（失信/经营异常等列表接口）：返回记录数；null=接口出错/未配置（调用方降级，不臆造） */
+async function countCheck(orgId: number, path: string, searchKey: string): Promise<number | null> {
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled || !searchKey.trim()) return null;
+  const url = `${cfg.base}/${path}?key=${encodeURIComponent(cfg.key)}&searchKey=${encodeURIComponent(searchKey)}&pageIndex=1&pageSize=10`;
+  try {
+    const res = await fetch(url, { headers: authHeaders(cfg), signal: AbortSignal.timeout(8000) });
+    const body = (await res.json()) as any;
+    if (String(body.Status) === '201') return 0; // 查空 = 确认无记录
+    if (String(body.Status) !== '200') {
+      console.warn(`[qcc] ${path} non-200:`, body.Status, body.Message);
+      return null;
+    }
+    const total = body.Paging?.TotalRecords ?? body.Paging?.TotalRecord;
+    if (total != null) return Number(total);
+    return Array.isArray(body.Result) ? body.Result.length : 0;
+  } catch (e) {
+    console.warn(`[qcc] ${path} failed:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+export interface RiskTag { label: string; kind: 'success' | 'warning' | 'danger' | 'neutral' }
+
+/**
+ * 风险核查（真实企查查接口）：失信被执行 ShiXin/GetList + 经营异常 ECIException/GetList。
+ * 未配置凭据 → enabled:false；单项接口失败 → 该项标注「核查失败」，绝不臆造结论。
+ */
+export async function riskScan(orgId: number, companyName: string): Promise<{ enabled: boolean; tags: RiskTag[] }> {
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled) return { enabled: false, tags: [] };
+  // 接口路径随账号开通的产品可能不同 → 支持 system_setting 覆盖（qcc.path.shixin / qcc.path.exception）
+  const [shixinPath, exceptionPath] = await Promise.all([
+    getSetting(orgId, 'qcc.path.shixin'),
+    getSetting(orgId, 'qcc.path.exception'),
+  ]);
+  const [shixin, exception] = await Promise.all([
+    countCheck(orgId, shixinPath || 'ShiXin/GetList', companyName),
+    countCheck(orgId, exceptionPath || 'ECIException/GetList', companyName),
+  ]);
+  const tags: RiskTag[] = [
+    shixin == null ? { label: '失信核查未获得（接口未开通或网络受限）', kind: 'neutral' }
+      : shixin > 0 ? { label: `失信被执行 ${shixin} 条`, kind: 'danger' }
+      : { label: '无失信记录', kind: 'success' },
+    exception == null ? { label: '经营异常核查未获得（接口未开通或网络受限）', kind: 'neutral' }
+      : exception > 0 ? { label: `经营异常 ${exception} 条`, kind: 'warning' }
+      : { label: '经营正常', kind: 'success' },
+  ];
+  return { enabled: true, tags };
+}
+
 export interface QccGroup {
   groupKeyNo: string;
   groupName: string;

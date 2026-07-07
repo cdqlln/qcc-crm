@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/primitives';
 import { Field, Select, TextInput } from '@/components/ui/form';
 import { CompanyNameInput } from '@/components/ui/CompanyNameInput';
 import { RegionSelect } from '@/components/ui/RegionSelect';
+import { parseRegion } from '@/lib/regions';
 import type { Customer } from '@/types';
 
 // 编辑口径 = 创建表单去掉负责人（负责人变更走「移交」审批流）
@@ -78,7 +79,7 @@ export function EditCustomerDialog({ cust, onClose }: { cust: Customer; onClose:
         <Button variant="primary" onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>{isSubmitting ? '保存中…' : '保存'}</Button>
       </>}>
       <div className="grid grid-cols-2 gap-4">
-        <Field label="客户名称" required error={errors.name?.message} hint="改名后按真实工商关系重新归集集团；可从联想中重选带入企查查ID" className="col-span-2">
+        <Field label="客户名称" required error={errors.name?.message} hint="改名后按真实工商关系重新归集集团；从联想中重选可关联工商主体并带入注册地区" className="col-span-2">
           <CompanyNameInput
             value={nameVal}
             invalid={!!errors.name}
@@ -86,6 +87,8 @@ export function EditCustomerDialog({ cust, onClose }: { cust: Customer; onClose:
             onPick={(c) => {
               setValue('name', c.name, { shouldValidate: true });
               setValue('refCompanyId', c.keyNo);
+              const region = parseRegion(c.address);
+              if (region.province) { setValue('province', region.province); setValue('city', region.city); }
             }}
           />
         </Field>

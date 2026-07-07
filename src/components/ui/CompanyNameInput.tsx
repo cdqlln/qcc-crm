@@ -14,7 +14,7 @@ export function CompanyNameInput({
 }: {
   value: string;
   onChange: (v: string) => void;
-  onPick: (c: { name: string; keyNo: string; operName?: string }) => void;
+  onPick: (c: { name: string; keyNo: string; operName?: string; address?: string }) => void;
   placeholder?: string;
   invalid?: boolean;
 }) {

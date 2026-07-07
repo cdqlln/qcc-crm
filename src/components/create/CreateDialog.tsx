@@ -17,6 +17,7 @@ import { useAuth } from '@/store/auth';
 import { useTerm } from '@/hooks/useTerms';
 import { TERMS_BIZ } from '@/mock/terms';
 import { cn } from '@/lib/cn';
+import { parseRegion } from '@/lib/regions';
 import { leadSchema, type LeadForm } from '@/features/leads/schema';
 import { customerSchema, type CustomerForm } from '@/features/customers/schema';
 import { opportunitySchema, type OpportunityForm } from '@/features/opportunities/schema';
@@ -214,9 +215,14 @@ function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
   const nameVal = watch('name') ?? '';
 
   const onSubmit = async (data: CustomerForm) => {
-    await customersApi.create(data);
+    const created = await customersApi.create(data);
     qc.invalidateQueries({ queryKey: ['customers'] });
-    toast(`客户「${data.name}」已创建`, 'success');
+    toast(
+      created.groupName
+        ? `客户「${data.name}」已创建，并按工商关系自动归集到「${created.groupName}」（可在客户详情取消归集）`
+        : `客户「${data.name}」已创建`,
+      'success',
+    );
     close();
   };
 
@@ -231,6 +237,9 @@ function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
             onPick={(c) => {
               setValue('name', c.name, { shouldValidate: true });
               setValue('refCompanyId', c.keyNo);
+              // 自动带入工商注册地址所在省市（可人工修改）
+              const region = parseRegion(c.address);
+              if (region.province) { setValue('province', region.province); setValue('city', region.city); }
             }}
           />
         </Field>
@@ -270,8 +279,19 @@ function CustomerFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="邮箱" error={errors.email?.message}>
           <TextInput {...register('email')} />
         </Field>
-        <Field label="企查查ID" hint="填写后按工商关系自动归集集团">
-          <TextInput placeholder="如 QCCDEMO_A1" {...register('refCompanyId')} />
+        <Field label="所在地区" className="col-span-2" hint="从工商联想选中后自动带入注册地址省市，可修改">
+          <RegionSelect
+            province={watch('province') ?? ''}
+            city={watch('city') ?? ''}
+            onChange={(p, c) => { setValue('province', p); setValue('city', c); }}
+          />
+        </Field>
+        <Field label="工商主体" hint="从名称联想选中真实企业即完成关联，并自动归集集团">
+          <div className="flex h-9 items-center">
+            {watch('refCompanyId')
+              ? <span className="rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">✓ 已关联工商主体</span>
+              : <span className="rounded-full bg-bg px-2.5 py-1 text-xs text-text-faint">未关联工商主体</span>}
+          </div>
         </Field>
         <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
       </div>

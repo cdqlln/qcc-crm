@@ -7,7 +7,7 @@ import { mapContact, mapCustomer, mapTracking } from '../mappers.js';
 import { createApprovalTask } from './approvals.js';
 import { autoAttachGroup } from './groups.js';
 import { dataScopeCond } from '../auth.js';
-import { fuzzySearch, getQccCfg } from '../services/qcc.js';
+import { fuzzySearch, getQccCfg, riskScan } from '../services/qcc.js';
 
 export const customersRouter = Router();
 
@@ -82,6 +82,18 @@ customersRouter.get('/company-search', ah(async (req, res) => {
   if (kw.length < 2) return ok(res, { enabled: true, list: [] });
   const list = await fuzzySearch(orgId, kw);
   ok(res, { enabled: true, list: list ?? [] });
+}));
+
+// 风险标签：通过企查查真实核查（失信/经营异常），结果缓存在客户行；未配置凭据明确降级
+customersRouter.post('/customers/:id/risk-scan', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const cust = await one<any>(`SELECT customer_id, name FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+  if (!cust) return fail(res, '客户不存在', 1, 404);
+  const r = await riskScan(orgId, cust.name);
+  if (!r.enabled) return fail(res, '未配置企查查凭据，无法核查工商风险（设置→集成配置）');
+  await one(`UPDATE customer SET risk_tags=$1, risk_checked_at=now() WHERE customer_id=$2 RETURNING customer_id`,
+    [JSON.stringify(r.tags), cust.customer_id]);
+  ok(res, { tags: r.tags, checkedAt: new Date().toISOString() });
 }));
 
 const contactSchema = z.object({
@@ -378,6 +390,7 @@ customersRouter.post(
     );
     // 按工商关系(企查查集团/实控人)自动归集；多公司同集团时自动归到一起
     const groupId = await autoAttachGroup(orgId, row.customer_id, d.name, d.refCompanyId);
-    ok(res, mapCustomer({ ...row, group_id: groupId }));
+    const g = groupId ? await one<any>(`SELECT name FROM customer_group WHERE group_id=$1`, [groupId]) : null;
+    ok(res, mapCustomer({ ...row, group_id: groupId, group_name: g?.name }));
   }),
 );
