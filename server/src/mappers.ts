@@ -184,6 +184,7 @@ export const mapContract = (r: any) => ({
   approval: r.approval,
   changeApproval: r.change_approval,
   reviewStatus: r.review_status ?? 0,
+  attachments: r.attachments ?? [],
   archive: r.archive,
   leaderId: r.leader_id,
 });

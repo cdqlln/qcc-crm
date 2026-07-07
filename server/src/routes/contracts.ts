@@ -237,6 +237,11 @@ const createSchema = z.object({
   beginDate: z.string().min(1),
   expiredDate: z.string().min(1),
   leaderId: z.coerce.number().int().positive(),
+  opportunityId: z.coerce.number().int().positive().optional(), // 关联商机（销售选自己的，部门负责人可选本部门的——列表接口按数据范围过滤）
+  // 合同文件（合同文本/扫描件，供法务审核）
+  attachments: z.array(z.object({
+    name: z.string(), url: z.string(), mime: z.string().optional(), size: z.coerce.number().optional(),
+  })).max(20).default([]),
 });
 
 contractsRouter.post(
@@ -246,15 +251,23 @@ contractsRouter.post(
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
-    const cust = await one<{ name: string }>(`SELECT name FROM customer WHERE customer_id=$1 AND organization_id=$2`, [d.customerId, orgId]);
+    // 关联商机方式：校验商机存在且客户一致（客户以商机为准）
+    let customerId = d.customerId;
+    if (d.opportunityId) {
+      const opp = await one<any>(`SELECT customer_id FROM opportunity WHERE opportunity_id=$1 AND organization_id=$2`, [d.opportunityId, orgId]);
+      if (!opp) return fail(res, '关联商机不存在');
+      customerId = Number(opp.customer_id);
+    }
+    const cust = await one<{ name: string }>(`SELECT name FROM customer WHERE customer_id=$1 AND organization_id=$2`, [customerId, orgId]);
     if (!cust) return fail(res, '客户不存在');
     const seq = await one<{ n: number }>(`SELECT count(*)+1 AS n FROM contract WHERE organization_id=$1`, [orgId]);
     const code = `HT${new Date().getFullYear()}${String(seq!.n).padStart(4, '0')}`;
     const row = await one(
-      `INSERT INTO contract (organization_id, code, name, customer_id, contract_type, renew_type,
-         begin_date, expired_date, status, amount, leader_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10) RETURNING *`,
-      [orgId, code, d.name, d.customerId, d.contractType, d.renewType, d.beginDate, d.expiredDate, d.amount, d.leaderId],
+      `INSERT INTO contract (organization_id, code, name, customer_id, opportunity_id, contract_type, renew_type,
+         begin_date, expired_date, status, amount, leader_id, attachments)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12) RETURNING *`,
+      [orgId, code, d.name, customerId, d.opportunityId ?? null, d.contractType, d.renewType, d.beginDate, d.expiredDate, d.amount, d.leaderId,
+       JSON.stringify(d.attachments ?? [])],
     );
     ok(res, mapContract({ ...row, customer_name: cust.name }));
   }),

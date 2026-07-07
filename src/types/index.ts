@@ -325,6 +325,7 @@ export interface Contract {
   approval: ApprovalStatus;
   changeApproval: ApprovalStatus;
   reviewStatus?: 0 | 1 | 2 | 3; // 法务审核：0未送审 1待审核 2通过 3驳回
+  attachments?: Attachment[]; // 合同文件（供法务审核）
   archive: boolean;
   leaderId?: number;
 }
