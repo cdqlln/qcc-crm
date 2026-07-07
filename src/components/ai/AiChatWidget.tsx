@@ -11,6 +11,63 @@ interface Msg {
   actions?: AiChatAction[];
 }
 
+// 轻量 Markdown 表格渲染：把回复中的 |a|b| 表格块渲染为真实表格，其余按原文换行显示
+function isTableRow(line: string) {
+  const t = line.trim();
+  return t.startsWith('|') && t.endsWith('|') && t.length > 2;
+}
+const isSeparatorRow = (line: string) => /^\|?[\s:\-|]+\|?$/.test(line.trim()) && line.includes('-');
+const splitCells = (line: string) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+
+function MsgContent({ text }: { text: string }) {
+  const lines = text.split('\n');
+  const blocks: ({ type: 'text'; lines: string[] } | { type: 'table'; header: string[]; rows: string[][] })[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (isTableRow(lines[i]) && i + 1 < lines.length && isSeparatorRow(lines[i + 1])) {
+      const header = splitCells(lines[i]);
+      const rows: string[][] = [];
+      i += 2;
+      while (i < lines.length && isTableRow(lines[i]) && !isSeparatorRow(lines[i])) {
+        rows.push(splitCells(lines[i]));
+        i++;
+      }
+      blocks.push({ type: 'table', header, rows });
+    } else {
+      const last = blocks[blocks.length - 1];
+      if (last?.type === 'text') last.lines.push(lines[i]);
+      else blocks.push({ type: 'text', lines: [lines[i]] });
+      i++;
+    }
+  }
+  return (
+    <>
+      {blocks.map((b, bi) =>
+        b.type === 'text' ? (
+          b.lines.join('\n').trim() ? <p key={bi} className="whitespace-pre-wrap">{b.lines.join('\n').replace(/^\n+|\n+$/g, '')}</p> : null
+        ) : (
+          <div key={bi} className="my-1.5 overflow-x-auto rounded-md border border-border/70">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-bg/80 text-left text-text-weak">
+                  {b.header.map((h, hi) => <th key={hi} className="whitespace-nowrap px-2 py-1 font-medium">{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {b.rows.map((r, ri) => (
+                  <tr key={ri} className="border-t border-border/50">
+                    {r.map((c, ci) => <td key={ci} className="px-2 py-1 align-top">{c}</td>)}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ),
+      )}
+    </>
+  );
+}
+
 const SUGGESTIONS = [
   '创建客户 云启数据科技有限公司',
   '给云启数据创建商机 预计50万',
@@ -103,11 +160,11 @@ export function AiChatWidget() {
                 <div className={cn('max-w-[88%] space-y-2', m.role === 'user' && 'text-right')}>
                   <div
                     className={cn(
-                      'inline-block whitespace-pre-wrap rounded-lg px-3 py-2 text-left text-sm leading-relaxed',
-                      m.role === 'user' ? 'bg-primary text-white' : 'bg-bg text-text',
+                      'inline-block rounded-lg px-3 py-2 text-left text-sm leading-relaxed',
+                      m.role === 'user' ? 'whitespace-pre-wrap bg-primary text-white' : 'bg-bg text-text',
                     )}
                   >
-                    {m.content}
+                    {m.role === 'assistant' ? <MsgContent text={m.content} /> : m.content}
                   </div>
                   {m.actions && m.actions.length > 0 && (
                     <div className="space-y-1">
