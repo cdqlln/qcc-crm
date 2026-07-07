@@ -92,6 +92,21 @@ export interface Customer {
   leadSnapshot?: LeadSnapshot; // 转化那一刻的线索原貌
 }
 
+/** 线索池进展总览（销售管理） */
+export interface PoolOverview {
+  pending: number;   // 待分配
+  todayIn: number;   // 今日新进池
+  assigned: number;  // 已分配（近200条）
+  unfollowed: number;
+  following: number;
+  converted: number;
+  list: {
+    customerId: number; name: string; leaderId?: number; leaderName: string; sourceName: string;
+    assignAt?: string; trackingNum: number; trackingUpdateDate?: string; convertedAt?: string;
+    status: 'unfollowed' | 'following' | 'converted';
+  }[];
+}
+
 /** 线索转化留痕快照 */
 export interface LeadSnapshot {
   name: string;

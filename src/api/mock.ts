@@ -108,11 +108,11 @@ export const leadsApi = {
     c.convertedAt = undefined; c.convertedBy = undefined; c.leadSnapshot = undefined; c.groupId = null; c.groupName = undefined;
     return delay({ ...c });
   },
-  create: (input: Partial<Customer>) => {
+  create: (input: Partial<Customer> & { toPool?: boolean }) => {
     const row: Customer = {
       customerId: nextId(customers, 'customerId'),
       organizationId: 1,
-      category: 1,
+      category: input.toPool ? 2 : 1,
       currentTrackingStatus: 15, // 未分配
       trackingNum: 0,
       approval: -1,
@@ -121,10 +121,34 @@ export const leadsApi = {
       trackingUpdateDate: dayjs().toISOString(),
       labels: [],
       ...input,
+      leaderId: input.toPool ? undefined : input.leaderId,
       name: input.name ?? '未命名线索',
     } as Customer;
     customers.unshift(row);
     return delay(row);
+  },
+  // 线索池进展总览（销售管理）
+  poolOverview: (): Promise<import('@/types').PoolOverview> => {
+    const pool = customers.filter((c) => c.category === 2 && c.active === 1);
+    const assigned = customers.filter((c) => c.active === 1 && c.assignAt);
+    const list = assigned.map((c) => {
+      const status: 'unfollowed' | 'following' | 'converted' = c.convertedAt ? 'converted'
+        : c.trackingUpdateDate && c.assignAt && c.trackingUpdateDate > c.assignAt ? 'following' : 'unfollowed';
+      return {
+        customerId: c.customerId, name: c.name, leaderId: c.leaderId, leaderName: userName(c.leaderId) ?? '',
+        sourceName: tName2(c.source), assignAt: c.assignAt, trackingNum: c.trackingNum ?? 0,
+        trackingUpdateDate: c.trackingUpdateDate, convertedAt: c.convertedAt, status,
+      };
+    }).sort((a, b) => (b.assignAt ?? '').localeCompare(a.assignAt ?? ''));
+    return delay({
+      pending: pool.length,
+      todayIn: pool.filter((c) => c.createDate && dayjs(c.createDate).isAfter(dayjs().startOf('day'))).length,
+      assigned: list.length,
+      unfollowed: list.filter((x) => x.status === 'unfollowed').length,
+      following: list.filter((x) => x.status === 'following').length,
+      converted: list.filter((x) => x.status === 'converted').length,
+      list,
+    });
   },
   update: (id: number, input: Partial<Customer>) => {
     const c = customers.find((x) => x.customerId === id);

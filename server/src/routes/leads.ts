@@ -4,7 +4,7 @@ import { one, query } from '../db.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapCustomer } from '../mappers.js';
-import { dataScopeCond } from '../auth.js';
+import { dataScopeCond, requirePermission } from '../auth.js';
 
 export const leadsRouter = Router();
 
@@ -140,7 +140,8 @@ const createSchema = z.object({
   city: z.string().optional(),
   phoneName: z.string().optional(),
   phone: z.string().optional(),
-  leaderId: z.coerce.number().int().positive(),
+  toPool: z.boolean().default(false),                    // 进入线索池（免负责人，由销售管理分配）
+  leaderId: z.coerce.number().int().positive().optional(),
 });
 
 leadsRouter.post(
@@ -150,15 +151,60 @@ leadsRouter.post(
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) return fail(res, parsed.error.issues[0]?.message ?? '参数错误');
     const d = parsed.data;
+    if (!d.toPool && !d.leaderId) return fail(res, '请指定负责人，或勾选「进入线索池」');
+    // 进池：category=2 未分配（status 15），负责人留空等待销售管理分配
     const row = await one(
       `INSERT INTO customer (organization_id, name, category, status_term_id, source_term_id, pool_group_term_id,
          industry, province, city, phone_name, phone, leader_id, created_by, tracking_update_at)
-       VALUES ($1,$2,1,15,$3,$4,$5,$6,$7,$8,$9,$10,$11, now()) RETURNING *`,
-      [orgId, d.name, d.source, d.poolGroup ?? null, d.industry ?? null, d.province ?? null, d.city ?? null, d.phoneName ?? null, d.phone ?? null, d.leaderId, userId],
+       VALUES ($1,$2,$3,15,$4,$5,$6,$7,$8,$9,$10,$11,$12, now()) RETURNING *`,
+      [orgId, d.name, d.toPool ? 2 : 1, d.source, d.poolGroup ?? null, d.industry ?? null, d.province ?? null, d.city ?? null,
+       d.phoneName ?? null, d.phone ?? null, d.toPool ? null : d.leaderId, userId],
     );
     ok(res, mapCustomer(row));
   }),
 );
+
+// ---------- 线索池管理（lead.pool：销售管理人员分配并跟踪进展） ----------
+leadsRouter.get('/lead-pool/overview', requirePermission('lead.pool'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  // 待分配池 + 今日新进池
+  const pool = await one<any>(
+    `SELECT count(*) FILTER (WHERE category=2) AS pending,
+            count(*) FILTER (WHERE category=2 AND created_at >= date_trunc('day', now())) AS today_in
+     FROM customer WHERE organization_id=$1 AND active=1`,
+    [orgId],
+  );
+  // 已分配线索的进展：未跟进（分配后无跟进动作）/ 跟进中 / 已转化
+  const rows = await query<any>(
+    `SELECT c.customer_id, c.name, c.leader_id, u.name AS leader_name, c.assign_at, c.tracking_num,
+            c.tracking_update_at, c.converted_at, src.name AS source_name
+     FROM customer c
+     LEFT JOIN app_user u ON u.user_id = c.leader_id
+     LEFT JOIN term src ON src.term_id = c.source_term_id
+     WHERE c.organization_id=$1 AND c.active=1 AND c.assign_at IS NOT NULL
+     ORDER BY c.assign_at DESC LIMIT 200`,
+    [orgId],
+  );
+  const list = rows.map((r: any) => {
+    const status = r.converted_at ? 'converted'
+      : r.tracking_update_at && r.assign_at && new Date(r.tracking_update_at) > new Date(r.assign_at) ? 'following'
+      : 'unfollowed';
+    return {
+      customerId: Number(r.customer_id), name: r.name, leaderId: r.leader_id, leaderName: r.leader_name ?? '',
+      sourceName: r.source_name ?? '', assignAt: r.assign_at, trackingNum: Number(r.tracking_num ?? 0),
+      trackingUpdateDate: r.tracking_update_at, convertedAt: r.converted_at, status,
+    };
+  });
+  ok(res, {
+    pending: Number(pool?.pending ?? 0),
+    todayIn: Number(pool?.today_in ?? 0),
+    assigned: list.length,
+    unfollowed: list.filter((x: any) => x.status === 'unfollowed').length,
+    following: list.filter((x: any) => x.status === 'following').length,
+    converted: list.filter((x: any) => x.status === 'converted').length,
+    list,
+  });
+}));
 
 // 编辑线索（#6）
 const editSchema = z.object({
@@ -233,7 +279,7 @@ leadsRouter.post(['/leads/:id/return-pool', '/leads/return-pool'], ah(async (req
   ok(res, await actLeads(idsOf(req), orgId, `category=2, leader_id=NULL, status_term_id=15, back_sea_time=now()`));
 }));
 // 分配（单条/批量，记分配时间）
-leadsRouter.post(['/leads/:id/assign', '/leads/assign'], ah(async (req, res) => {
+leadsRouter.post(['/leads/:id/assign', '/leads/assign'], requirePermission('lead.pool'), ah(async (req, res) => {
   const { orgId } = ctx(req);
   const toUserId = Number(req.body?.toUserId);
   if (!toUserId) return fail(res, '请选择分配对象');

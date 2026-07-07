@@ -13,7 +13,8 @@ export const leadSchema = z.object({
     .string()
     .optional()
     .refine((v) => !v || /^1[3-9]\d{9}$/.test(v), '手机号格式不正确'),
-  leaderId: z.coerce.number().int().positive('请指定负责人'),
+  toPool: z.boolean().optional(), // 进入线索池（免负责人，由销售管理分配）
+  leaderId: z.coerce.number().int().positive().optional(),
 });
 
 export type LeadForm = z.infer<typeof leadSchema>;

@@ -132,11 +132,13 @@ function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
     formState: { errors, isSubmitting },
   } = useForm<LeadForm>({ resolver: zodResolver(leadSchema), defaultValues: { leaderId: me?.userId as any, ...(preset as any) } });
   const { ownerProps } = useOwner(watch, setValue);
+  const toPool = !!watch('toPool');
 
   const onSubmit = async (data: LeadForm) => {
-    await leadsApi.create(data);
+    if (!data.toPool && !data.leaderId) return toast('请指定负责人，或勾选「进入线索池」', 'error');
+    await leadsApi.create(data.toPool ? { ...data, leaderId: undefined } : data);
     qc.invalidateQueries({ queryKey: ['leads'] });
-    toast(`线索「${data.name}」已创建`, 'success');
+    toast(data.toPool ? `线索「${data.name}」已进入线索池，等待销售管理分配` : `线索「${data.name}」已创建`, 'success');
     close();
   };
 
@@ -184,7 +186,13 @@ function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="联系电话" error={errors.phone?.message}>
           <TextInput placeholder="手机号" {...register('phone')} />
         </Field>
-        <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
+        <Field label="归属方式" hint="进池后由销售管理人员统一分配并跟踪进展">
+          <label className="flex h-9 cursor-pointer items-center gap-2 text-sm text-text-weak">
+            <input type="checkbox" checked={toPool} onChange={(e) => setValue('toPool', e.target.checked)} />
+            进入线索池（不指定负责人）
+          </label>
+        </Field>
+        {!toPool && <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />}
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />
     </form>
