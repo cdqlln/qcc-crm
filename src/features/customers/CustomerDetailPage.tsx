@@ -34,6 +34,7 @@ import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
 import { LeadOriginDialog } from './LeadOriginDialog';
 import { CustomerOrgTab } from './CustomerOrgTab';
 import { ComboInput } from '@/components/ui/ComboInput';
+import { OwnerTrace } from '@/components/ui/OwnerTrace';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -129,7 +130,9 @@ export function CustomerDetailPage() {
                   <Descriptions
                     columns={3}
                     items={[
-                      { label: '企查查ID', value: cust.refCompanyId },
+                      { label: '工商主体', value: cust.refCompanyId
+                        ? <StatusTag kind="success" label="已关联工商主体" dot={false} />
+                        : <StatusTag kind="neutral" label="未关联工商主体" dot={false} /> },
                       { label: '行业', value: cust.industry },
                       { label: '来源', value: <TermTag id={cust.source} dot={false} /> },
                       { label: '所在地区', value: `${cust.province}${cust.city}` },
@@ -149,14 +152,9 @@ export function CustomerDetailPage() {
                 <CustomFieldsSection customerId={cid} values={cust.customFields} />
                 <GroupSection cust={cust} />
               </div>
-              <div>
-                <Section title="风险标签">
-                  <div className="flex flex-wrap gap-2">
-                    <StatusTag kind="warning" label="存在司法案件" />
-                    <StatusTag kind="neutral" label="股权无异常" />
-                    <StatusTag kind="success" label="经营正常" />
-                  </div>
-                </Section>
+              <div className="space-y-5">
+                <RiskTagsSection cust={cust} />
+                <OwnerTrace entityId={cid} types="lead,customer" />
               </div>
             </div>
           )}
@@ -190,12 +188,7 @@ export function CustomerDetailPage() {
           {tab === 'quotations' && <QuoteMini rows={custQuotes} onRow={(r) => navigate(`/quotations/${r.quotationId}`)} />}
           {tab === 'contracts' && <ContractMini rows={custContracts} onRow={(r) => navigate(`/contracts/${r.contractId}`)} />}
 
-          {tab === 'risk' && (
-            <div className="flex items-center gap-3 rounded-lg border border-border bg-bg p-4">
-              <ShieldAlert className="text-warning" />
-              <div className="text-sm text-text-weak">风险监控（customer_risk_monitor）：经营异常 0 项 · 司法案件 1 项 · 行政处罚 0 项</div>
-            </div>
-          )}
+          {tab === 'risk' && <RiskTabContent cust={cust} />}
           {tab === 'dynamic' && <ActivityTab customerId={cid} onViewLead={cust.convertedAt ? () => setLeadOriginOpen(true) : undefined} />}
           {tab === 'ai' && (
             <div className="-m-5 h-[560px]">
@@ -372,6 +365,50 @@ function ContactDialog({ customerId, contact, onClose, onDone }: { customerId: n
   );
 }
 
+// 风险标签：企查查真实核查（失信/经营异常），结果缓存；未核查/未配置时如实说明，不臆造
+function RiskTagsSection({ cust }: { cust: Customer }) {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  const scan = async () => {
+    setBusy(true);
+    try {
+      const r = await customersApi.riskScan(cust.customerId);
+      qc.invalidateQueries({ queryKey: ['customer', cust.customerId] });
+      toast(`风险核查完成：${r.tags.map((t) => t.label).join('、')}`, 'success');
+    } catch (e) { toast(e instanceof Error ? e.message : '核查失败', 'error'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Section title="风险标签">
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {cust.riskTags?.length
+            ? cust.riskTags.map((t, i) => <StatusTag key={i} kind={t.kind} label={t.label} />)
+            : <span className="text-xs text-text-faint">未核查（通过企查查 API 获取失信/经营异常）</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={scan} disabled={busy}><ShieldAlert size={13} />{busy ? '核查中…' : cust.riskTags?.length ? '更新风险' : '立即核查'}</Button>
+          {cust.riskCheckedAt && <span className="text-xs text-text-faint">上次核查 {formatDate(cust.riskCheckedAt, 'MM-DD HH:mm')}</span>}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function RiskTabContent({ cust }: { cust: Customer }) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-bg p-4">
+      <ShieldAlert className="text-warning" />
+      <div className="text-sm text-text-weak">
+        {cust.riskTags?.length
+          ? <>工商风险核查（企查查）：{cust.riskTags.map((t) => t.label).join(' · ')}（{formatDate(cust.riskCheckedAt, 'YYYY-MM-DD HH:mm')} 核查）</>
+          : '尚未核查工商风险——在「概览→风险标签」点击「立即核查」通过企查查 API 获取失信/经营异常记录。'}
+      </div>
+    </div>
+  );
+}
+
 // 集团归属：显示所属集团与同集团客户，支持人工调整
 function GroupSection({ cust }: { cust: Customer }) {
   const navigate = useNavigate();
@@ -395,6 +432,7 @@ function GroupSection({ cust }: { cust: Customer }) {
           </div>
           <div className="flex gap-2">
             <RegroupButton />
+            {cust.groupId && <UngroupButton cust={cust} />}
             <Button size="sm" onClick={() => setOpen(true)}><Network size={13} />调整集团</Button>
           </div>
         </div>
@@ -410,6 +448,20 @@ function GroupSection({ cust }: { cust: Customer }) {
       {open && <GroupDialog cust={cust} onClose={() => setOpen(false)} />}
     </Section>
   );
+}
+
+// 取消归集：把客户移出当前集团（自动归集可随时撤销）
+function UngroupButton({ cust }: { cust: Customer }) {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const run = async () => {
+    await groupsApi.setCustomerGroup(cust.customerId, null);
+    toast(`已取消「${cust.groupName}」集团归集`, 'info');
+    qc.invalidateQueries({ queryKey: ['customer', cust.customerId] });
+    qc.invalidateQueries({ queryKey: ['groups'] });
+    qc.invalidateQueries({ queryKey: ['group-members'] });
+  };
+  return <Button size="sm" onClick={run}>取消归集</Button>;
 }
 
 // 按工商关系(企查查集团/实控人)全量自动归集

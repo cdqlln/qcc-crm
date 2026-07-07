@@ -19,10 +19,13 @@ import { useTerm } from '@/hooks/useTerms';
 import { TERMS_BIZ } from '@/mock/terms';
 import { MOCK_USERS, userName } from '@/mock/org';
 import { formatDate } from '@/lib/format';
+import { usePerm } from '@/store/auth';
+import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
+import { PoolProgressPanel } from './PoolProgressPanel';
 import type { Customer } from '@/types';
 import { LeadDrawer } from './LeadDrawer';
 
-const TABS = [
+const BASE_TABS = [
   { key: 'all', label: '销售线索' },
   { key: 'mine', label: '我负责的' },
   { key: 'pool', label: '线索池' },
@@ -46,6 +49,9 @@ export function LeadsPage() {
   const openCreate = useCreate((s) => s.open);
   const term = useTerm();
   const qc = useQueryClient();
+  const { can } = usePerm();
+  const canPool = can('lead.pool'); // 销售管理：线索池分配与进展跟踪
+  const TABS = canPool ? [...BASE_TABS, { key: 'progress', label: '分配进展' }] : BASE_TABS;
 
   const opt = (biz: number) => term.options(biz).map((t) => ({ label: t.name, value: t.termId }));
   const filterSchema: FilterField[] = [
@@ -154,6 +160,9 @@ export function LeadsPage() {
         <FilterChips schema={filterSchema} value={q.filters} onChange={q.setFilters} />
       </div>
 
+      {q.tab === 'progress' ? (
+        <PoolProgressPanel />
+      ) : (
       <DataTable
         columns={columns}
         data={q.data}
@@ -167,7 +176,7 @@ export function LeadsPage() {
         onSortChange={q.setSort}
         bulkActions={[
           { label: '领取', icon: <UserCheck size={13} />, onClick: (rows) => runIds(leadsApi.claim, rows, `已领取 ${rows.length} 条线索`) },
-          { label: '分配', icon: <UserCog size={13} />, onClick: (rows) => setAssignRows(rows) },
+          ...(canPool ? [{ label: '分配', icon: <UserCog size={13} />, onClick: (rows: Customer[]) => setAssignRows(rows) }] : []),
           { label: '转客户', icon: <ArrowRightLeft size={13} />, onClick: convert },
           { label: '转商机', icon: <Briefcase size={13} />, onClick: async (rows) => {
             try { for (const r of rows) await leadsApi.toOpportunity(r.customerId); refresh(); toast(`已为 ${rows.length} 条线索创建商机`, 'success'); }
@@ -178,6 +187,7 @@ export function LeadsPage() {
         ]}
         pagination={{ page: q.page, pageSize: q.pageSize, total: q.total, onChange: q.setPage }}
       />
+      )}
 
       <FilterPanel
         open={filterOpen}
@@ -206,15 +216,12 @@ export function LeadsPage() {
 }
 
 function AssignDialog({ count, onClose, onConfirm }: { count: number; onClose: () => void; onConfirm: (userId: number) => void }) {
-  const [uid, setUid] = useState('');
+  const [uid, setUid] = useState<number | undefined>(undefined);
   return (
     <Dialog open onClose={onClose} title={`分配 ${count} 条线索`} width="w-[420px]"
-      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!uid} onClick={() => onConfirm(Number(uid))}>确认分配</Button></>}>
-      <Field label="分配给">
-        <Select value={uid} onChange={(e) => setUid(e.target.value)}>
-          <option value="">请选择销售</option>
-          {MOCK_USERS.map((u) => <option key={u.userId} value={u.userId}>{u.name}（{u.depName}）</option>)}
-        </Select>
+      footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" disabled={!uid} onClick={() => onConfirm(uid!)}>确认分配</Button></>}>
+      <Field label="分配给" hint="搜索姓名选择销售">
+        <UserSearchSelect value={uid} onChange={(id) => setUid(id)} />
       </Field>
     </Dialog>
   );

@@ -79,7 +79,8 @@ export const leadsApi = {
   get: (id: number) => get<Customer>(`/leads/${id}`),
   convert: (id: number) => post<Customer>(`/leads/${id}/convert`),
   unlink: (id: number) => post<Customer>(`/leads/${id}/unlink`),
-  create: (input: Partial<Customer>) => post<Customer>('/leads', input),
+  create: (input: Partial<Customer> & { toPool?: boolean }) => post<Customer>('/leads', input),
+  poolOverview: () => get<import('@/types').PoolOverview>('/lead-pool/overview'),
   update: (id: number, input: Partial<Customer>) => put<Customer>(`/leads/${id}`, input),
   claim: (ids: number[]) => post<Customer[]>('/leads/claim', { ids }),
   receive: (ids: number[]) => post<Customer[]>('/leads/receive', { ids }),
@@ -105,7 +106,7 @@ export const customersApi = {
   create: (input: Partial<Customer>) => post<Customer>('/customers', input),
   update: (id: number, input: Partial<Customer>) => put<Customer>(`/customers/${id}`, input),
   companySearch: (kw: string) =>
-    get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string }[] }>(
+    get<{ enabled: boolean; list: { keyNo: string; name: string; creditCode?: string; operName?: string; status?: string; address?: string }[] }>(
       `/company-search?kw=${encodeURIComponent(kw)}`,
     ),
   lastQuotePrices: (customerId: number) =>
@@ -119,6 +120,8 @@ export const customersApi = {
     post<import('@/types').CustomerOrgNode>(`/customers/${customerId}/org-nodes`, input),
   renameOrgNode: (nodeId: number, name: string) => put(`/org-nodes/${nodeId}`, { name }),
   removeOrgNode: (nodeId: number) => req(`/org-nodes/${nodeId}`, { method: 'DELETE' }),
+  ownerLogs: (entityId: number, types: string) => get<import('@/types').OwnerLog[]>(`/owner-logs?entityId=${entityId}&types=${types}`),
+  riskScan: (customerId: number) => post<{ tags: import('@/types').RiskTag[]; checkedAt: string }>(`/customers/${customerId}/risk-scan`),
   insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
   generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),
 };
@@ -307,6 +310,10 @@ export const integrationsApi = {
     put('/integrations/ai', input),
   clearAi: () => req('/integrations/ai', { method: 'DELETE' }),
   testAi: () => post<{ ok: boolean; model: string; sample: string }>('/integrations/ai/test'),
+  sso: () => get<import('@/types').SsoCfgView>('/integrations/sso'),
+  saveSso: (input: Partial<import('@/types').SsoCfgView> & { clientSecret?: string }) => put('/integrations/sso', input),
+  ssoUsers: () => get<import('@/types').SsoUser[]>('/integrations/sso/users'),
+  setSsoUserStatus: (userId: number, status: 0 | 1) => put(`/integrations/sso/users/${userId}`, { status }),
 };
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),

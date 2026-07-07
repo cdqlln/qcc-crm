@@ -5,6 +5,7 @@ import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapOpportunity } from '../mappers.js';
 import { dataScopeCond } from '../auth.js';
+import { logOwnerChange } from '../services/ownerTrace.js';
 
 export const opportunitiesRouter = Router();
 
@@ -121,6 +122,7 @@ opportunitiesRouter.post(
       );
     }
     await one(`UPDATE customer SET opportunity_count = opportunity_count + 1 WHERE customer_id=$1`, [d.customerId]);
+    await logOwnerChange(orgId, 'opportunity', (row as any).opportunity_id, null, d.leaderId, 'init', ctx(req).userId, '新建商机');
     ok(res, mapOpportunity({ ...row, customer_name: cust.name }));
   }),
 );

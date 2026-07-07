@@ -40,6 +40,8 @@ export const mapCustomer = (r: any) => ({
   convertedAt: r.converted_at,
   convertedBy: r.converted_by,
   leadSnapshot: r.lead_snapshot ?? undefined,
+  riskTags: r.risk_tags ?? undefined,
+  riskCheckedAt: r.risk_checked_at ?? undefined,
 });
 
 export const mapContact = (r: any) => ({

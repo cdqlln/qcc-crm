@@ -90,6 +90,42 @@ export interface Customer {
   convertedAt?: string; // 线索转化时间（有值=由线索转化而来）
   convertedBy?: number;
   leadSnapshot?: LeadSnapshot; // 转化那一刻的线索原貌
+  riskTags?: RiskTag[]; // 工商风险标签（企查查真实核查缓存）
+  riskCheckedAt?: string;
+}
+
+/** 工商风险标签（企查查核查结果） */
+export interface RiskTag { label: string; kind: 'success' | 'warning' | 'danger' | 'neutral' }
+
+/** 线索池进展总览（销售管理） */
+export interface PoolOverview {
+  pending: number;   // 待分配
+  todayIn: number;   // 今日新进池
+  assigned: number;  // 已分配（近200条）
+  unfollowed: number;
+  following: number;
+  converted: number;
+  list: {
+    customerId: number; name: string; leaderId?: number; leaderName: string; sourceName: string;
+    assignAt?: string; trackingNum: number; trackingUpdateDate?: string; convertedAt?: string;
+    status: 'unfollowed' | 'following' | 'converted';
+  }[];
+}
+
+/** 归属追溯：负责人变更记录 */
+export interface OwnerLog {
+  logId: number;
+  entityType: 'lead' | 'customer' | 'opportunity';
+  entityId: number;
+  fromUserId?: number | null;
+  fromName: string;
+  toUserId?: number | null;
+  toName: string;
+  via: 'init' | 'claim' | 'assign' | 'pool' | 'transfer' | 'edit' | 'unlink';
+  operatorId?: number | null;
+  operatorName: string;
+  remark: string;
+  createDate: string;
 }
 
 /** 线索转化留痕快照 */
@@ -654,6 +690,34 @@ export interface CustomerInsightReport {
   insight: CustomerInsight;
   generatedBy: 'llm' | 'rules';
   model?: string;
+}
+
+/** SSO 配置（管理端） */
+export interface SsoCfgView {
+  enabled: boolean;
+  name: string;
+  authorizeUrl: string;
+  tokenUrl: string;
+  userinfoUrl: string;
+  clientId: string;
+  clientSecretMasked: string;
+  scope: string;
+  callbackUrl: string;
+  frontendUrl: string;
+  autoProvision: boolean;
+  defaultRoleId: number | null;
+}
+/** SSO 同步账号 */
+export interface SsoUser {
+  userId: number;
+  name: string;
+  username: string;
+  email: string;
+  status: number; // 1开通 0待开通/停用
+  provider: string;
+  syncedAt?: string;
+  lastLoginAt?: string;
+  roles: string[];
 }
 
 export interface AiIntegrationCfg {

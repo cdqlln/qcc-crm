@@ -4,7 +4,7 @@ import { MOCK_USERS, userName } from '@/mock/org';
 import type { PermissionItem, Role, UserRoles } from '@/types';
 
 const PERMS: PermissionItem[] = [
-  ['lead.view', '线索-查看', '线索'], ['lead.edit', '线索-编辑/转化', '线索'], ['lead.assign', '线索-分配/领取', '线索'], ['lead.export', '线索-导出', '线索'],
+  ['lead.view', '线索-查看', '线索'], ['lead.edit', '线索-编辑/转化', '线索'], ['lead.assign', '线索-分配/领取', '线索'], ['lead.pool', '线索池-分配/进展跟踪', '线索'], ['lead.export', '线索-导出', '线索'],
   ['customer.view', '客户-查看', '客户'], ['customer.edit', '客户-编辑', '客户'], ['customer.transfer', '客户-移交', '客户'], ['customer.export', '客户-导出', '客户'], ['customer.delete', '客户-删除/退公海', '客户'],
   ['opportunity.view', '商机-查看', '商机'], ['opportunity.edit', '商机-编辑', '商机'],
   ['quotation.view', '报价-查看', '报价'], ['quotation.edit', '报价-编辑', '报价'], ['quotation.approve', '报价/单据-审批', '审批'],

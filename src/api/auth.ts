@@ -25,6 +25,8 @@ async function call<T>(path: string, body?: unknown, method?: 'GET' | 'POST'): P
 // ---- 真实后端 ----
 const backendAuth = {
   login: (username: string, password: string) => call<Session>('/login', { username, password }),
+  ssoStatus: () => call<{ enabled: boolean; name: string }>('/sso/status'),
+  ssoLoginUrl: () => `${BASE}/api/auth/sso/login`,
   me: () => call<AuthUser>('/me'),
   wecomUrl: (as?: string) => call<{ url: string; dev: boolean }>(`/wecom/url${as ? `?as=${as}` : ''}`),
   changePassword: (oldPassword: string, newPassword: string) =>
@@ -56,6 +58,8 @@ function mockSession(userId: number): Session {
   return { accessToken: `mock.${u.userId}.${Date.now()}`, refreshToken: `mockr.${u.userId}`, user };
 }
 const mockAuth = {
+  ssoStatus: async () => ({ enabled: false, name: '企业 SSO' }),
+  ssoLoginUrl: () => '#',
   login: async (username: string, password: string): Promise<Session> => {
     await new Promise((r) => setTimeout(r, 200));
     const id = MOCK_LOGIN[username.toLowerCase()];

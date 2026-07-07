@@ -6,6 +6,7 @@ import { dataScopeCond } from '../auth.js';
 import { chatWithTools, getLlmCfg, type ChatTurn, type ToolDef } from '../services/llm.js';
 import { gatherFacts } from './insight.js';
 import { autoAttachGroup } from './groups.js';
+import { logOwnerChange } from '../services/ownerTrace.js';
 
 export const aiChatRouter = Router();
 
@@ -190,6 +191,7 @@ function makeExecutor(req: Request, actions: ChatAction[]) {
       );
       // 集团归属只走真实工商数据（企查查/映射表），无数据则保持独立
       const groupId = await autoAttachGroup(orgId, row.customer_id, cname, null);
+      await logOwnerChange(orgId, 'customer', row.customer_id, null, userId, 'init', userId, 'AI助手创建');
       actions.push({ type: 'customer', label: `已创建客户「${cname}」`, link: `/customers/${row.customer_id}` });
       return { customerId: Number(row.customer_id), name: row.name, groupId, leader: '当前用户' };
     }
@@ -251,6 +253,7 @@ function makeExecutor(req: Request, actions: ChatAction[]) {
         [orgId, code, oname, cid, amount, stageId, expected, userId, s('competitor') || null],
       );
       await one(`UPDATE customer SET opportunity_count = opportunity_count + 1 WHERE customer_id=$1`, [cid]);
+      await logOwnerChange(orgId, 'opportunity', Number(row.opportunity_id), null, userId, 'init', userId, 'AI助手创建');
       actions.push({ type: 'opportunity', label: `已创建商机「${oname}」（¥${amount.toLocaleString()}）`, link: `/opportunities/${row.opportunity_id}` });
       return { opportunityId: Number(row.opportunity_id), code, name: oname, stage: '需求沟通', expectedDate: expected };
     }

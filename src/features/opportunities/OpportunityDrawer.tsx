@@ -12,6 +12,7 @@ import { MoneyText } from '@/components/ui/MoneyText';
 import { TermTag } from '@/components/ui/TermTag';
 import { ApprovalBadge } from '@/components/ui/ApprovalBadge';
 import { AiPanel } from '@/components/ai/AiPanel';
+import { OwnerTrace } from '@/components/ui/OwnerTrace';
 import { TableSkeleton } from '@/components/ui/states';
 import { useTerm } from '@/hooks/useTerms';
 import { useUI } from '@/store/ui';
@@ -74,6 +75,7 @@ export function OpportunityDrawer({ id, onClose }: { id: number; onClose: () => 
           <Tabs items={TABS} value={tab} onChange={setTab} className="mb-4" />
 
           {tab === 'overview' && (
+            <div className="space-y-5">
             <Descriptions
               items={[
                 { label: '客户', value: opp.customerName },
@@ -88,6 +90,8 @@ export function OpportunityDrawer({ id, onClose }: { id: number; onClose: () => 
                 { label: '审批状态', value: <ApprovalBadge approval={opp.approval} /> },
               ]}
             />
+            <OwnerTrace entityId={opp.opportunityId} types="opportunity" />
+            </div>
           )}
           {tab === 'product' && (
             <div className="rounded-lg border border-border p-4 text-sm text-text-weak">

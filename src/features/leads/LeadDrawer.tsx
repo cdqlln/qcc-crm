@@ -13,6 +13,7 @@ import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
 import { AiPanel } from '@/components/ai/AiPanel';
+import { OwnerTrace } from '@/components/ui/OwnerTrace';
 import { TableSkeleton } from '@/components/ui/states';
 import { useUI } from '@/store/ui';
 import { TERMS_BIZ } from '@/mock/terms';
@@ -118,10 +119,13 @@ export function LeadDrawer({
 
   function OverviewTab({ lead }: { lead: Customer }) {
     return (
+      <div className="space-y-5">
       <Descriptions
         items={[
           { label: '线索名称', value: lead.name },
-          { label: '企查查ID', value: lead.refCompanyId },
+          { label: '工商主体', value: lead.refCompanyId
+            ? <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">已关联工商主体</span>
+            : <span className="rounded-full bg-bg px-2 py-0.5 text-xs text-text-faint">未关联</span> },
           { label: '线索来源', value: <TermTag id={lead.source} dot={false} /> },
           { label: '线索分组', value: <TermTag id={lead.poolGroup} dot={false} /> },
           { label: '行业', value: lead.industry },
@@ -136,6 +140,8 @@ export function LeadDrawer({
           { label: '创建时间', value: formatDate(lead.createDate) },
         ]}
       />
+      <OwnerTrace entityId={lead.customerId} types="lead,customer" />
+      </div>
     );
   }
 }
