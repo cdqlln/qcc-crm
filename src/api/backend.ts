@@ -309,6 +309,10 @@ export const integrationsApi = {
     put('/integrations/ai', input),
   clearAi: () => req('/integrations/ai', { method: 'DELETE' }),
   testAi: () => post<{ ok: boolean; model: string; sample: string }>('/integrations/ai/test'),
+  sso: () => get<import('@/types').SsoCfgView>('/integrations/sso'),
+  saveSso: (input: Partial<import('@/types').SsoCfgView> & { clientSecret?: string }) => put('/integrations/sso', input),
+  ssoUsers: () => get<import('@/types').SsoUser[]>('/integrations/sso/users'),
+  setSsoUserStatus: (userId: number, status: 0 | 1) => put(`/integrations/sso/users/${userId}`, { status }),
 };
 export const orgApi = {
   info: () => get<OrgInfo>('/org'),

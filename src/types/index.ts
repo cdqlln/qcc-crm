@@ -676,6 +676,34 @@ export interface CustomerInsightReport {
   model?: string;
 }
 
+/** SSO 配置（管理端） */
+export interface SsoCfgView {
+  enabled: boolean;
+  name: string;
+  authorizeUrl: string;
+  tokenUrl: string;
+  userinfoUrl: string;
+  clientId: string;
+  clientSecretMasked: string;
+  scope: string;
+  callbackUrl: string;
+  frontendUrl: string;
+  autoProvision: boolean;
+  defaultRoleId: number | null;
+}
+/** SSO 同步账号 */
+export interface SsoUser {
+  userId: number;
+  name: string;
+  username: string;
+  email: string;
+  status: number; // 1开通 0待开通/停用
+  provider: string;
+  syncedAt?: string;
+  lastLoginAt?: string;
+  roles: string[];
+}
+
 export interface AiIntegrationCfg {
   enabled: boolean;
   source: string; // db | env | none

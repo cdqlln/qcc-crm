@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, PlugZap, Sparkles, Trash2 } from 'lucide-react';
-import { integrationsApi } from '@/api/crm';
+import { CheckCircle2, KeyRound, PlugZap, Sparkles, Trash2, UserCheck2, UserX2 } from 'lucide-react';
+import { integrationsApi, rolesApi } from '@/api/crm';
 import { usePerm } from '@/store/auth';
 import { useUI } from '@/store/ui';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -104,7 +104,149 @@ export function IntegrationsPage() {
 
       <div className="mt-4" />
       <AiModelCard />
+      <div className="mt-4" />
+      <SsoCard />
     </div>
+  );
+}
+
+// SSO 单点登录（OIDC）：管理员配置 IdP、同步账号开通与默认角色；登录审计见 设置→日志审计
+function SsoCard() {
+  const qc = useQueryClient();
+  const toast = useUI((s) => s.toast);
+  const { data, isLoading } = useQuery({ queryKey: ['integration-sso'], queryFn: () => integrationsApi.sso() });
+  const { data: roles = [] } = useQuery({ queryKey: ['roles'], queryFn: () => rolesApi.list() });
+  const { data: ssoUsers = [] } = useQuery({ queryKey: ['sso-users'], queryFn: () => integrationsApi.ssoUsers() });
+
+  const [f, setF] = useState<Record<string, string>>({});
+  const [enabled, setEnabled] = useState(false);
+  const [autoProvision, setAutoProvision] = useState(true);
+  const [defaultRoleId, setDefaultRoleId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [seeded, setSeeded] = useState(false);
+  if (data && !seeded) {
+    setF({
+      name: data.name, authorizeUrl: data.authorizeUrl, tokenUrl: data.tokenUrl, userinfoUrl: data.userinfoUrl,
+      clientId: data.clientId, clientSecret: '', scope: data.scope, callbackUrl: data.callbackUrl, frontendUrl: data.frontendUrl,
+    });
+    setEnabled(data.enabled); setAutoProvision(data.autoProvision);
+    setDefaultRoleId(data.defaultRoleId ? String(data.defaultRoleId) : '');
+    setSeeded(true);
+  }
+  const set = (k: string, v: string) => setF((x) => ({ ...x, [k]: v }));
+
+  const save = async () => {
+    if (!f.authorizeUrl || !f.tokenUrl || !f.userinfoUrl || !f.clientId || !f.callbackUrl)
+      return toast('请完整填写 授权/令牌/用户信息地址、ClientID 与回调地址', 'error');
+    setBusy(true);
+    try {
+      await integrationsApi.saveSso({
+        enabled, name: f.name, authorizeUrl: f.authorizeUrl, tokenUrl: f.tokenUrl, userinfoUrl: f.userinfoUrl,
+        clientId: f.clientId, clientSecret: f.clientSecret || undefined, scope: f.scope,
+        callbackUrl: f.callbackUrl, frontendUrl: f.frontendUrl, autoProvision,
+        defaultRoleId: defaultRoleId ? Number(defaultRoleId) : null,
+      });
+      toast('SSO 配置已保存（凭据仅存数据库）', 'success');
+      set('clientSecret', '');
+      qc.invalidateQueries({ queryKey: ['integration-sso'] });
+    } catch (e) { toast(e instanceof Error ? e.message : '保存失败', 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const toggleUser = async (userId: number, status: 0 | 1) => {
+    await integrationsApi.setSsoUserStatus(userId, status);
+    toast(status === 1 ? '已开通 CRM 使用权限' : '已停用（旧会话即时失效）', 'success');
+    qc.invalidateQueries({ queryKey: ['sso-users'] });
+  };
+
+  return (
+    <Card className="max-w-2xl">
+      <CardHeader
+        title={<span className="flex items-center gap-2"><KeyRound size={16} className="text-primary" />SSO 单点登录（OIDC）</span>}
+        extra={isLoading ? null : <StatusTag kind={data?.enabled ? 'success' : 'neutral'} label={data?.enabled ? '已启用' : '未启用'} />}
+      />
+      {isLoading ? <TableSkeleton rows={4} cols={2} /> : (
+        <div className="space-y-4 p-4">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="显示名称"><TextInput value={f.name ?? ''} onChange={(e) => set('name', e.target.value)} placeholder="如：集团统一登录" /></Field>
+            <Field label="Scope"><TextInput value={f.scope ?? ''} onChange={(e) => set('scope', e.target.value)} placeholder="openid profile email" /></Field>
+            <Field label="授权地址 authorize" required className="col-span-2"><TextInput value={f.authorizeUrl ?? ''} onChange={(e) => set('authorizeUrl', e.target.value)} placeholder="https://idp.example.com/oauth2/authorize" /></Field>
+            <Field label="令牌地址 token" required className="col-span-2"><TextInput value={f.tokenUrl ?? ''} onChange={(e) => set('tokenUrl', e.target.value)} placeholder="https://idp.example.com/oauth2/token" /></Field>
+            <Field label="用户信息地址 userinfo" required className="col-span-2"><TextInput value={f.userinfoUrl ?? ''} onChange={(e) => set('userinfoUrl', e.target.value)} placeholder="https://idp.example.com/oauth2/userinfo" /></Field>
+            <Field label="Client ID" required><TextInput value={f.clientId ?? ''} onChange={(e) => set('clientId', e.target.value)} /></Field>
+            <Field label="Client Secret" hint={data?.clientSecretMasked ? `当前 ${data.clientSecretMasked}，留空不更换` : undefined}>
+              <TextInput type="password" value={f.clientSecret ?? ''} onChange={(e) => set('clientSecret', e.target.value)} />
+            </Field>
+            <Field label="回调地址（配到 IdP）" required className="col-span-2" hint="本系统对外地址 + /api/auth/sso/callback">
+              <TextInput value={f.callbackUrl ?? ''} onChange={(e) => set('callbackUrl', e.target.value)} placeholder="https://crm.example.com/api/auth/sso/callback" />
+            </Field>
+            <Field label="登录后跳回前端地址" className="col-span-2"><TextInput value={f.frontendUrl ?? ''} onChange={(e) => set('frontendUrl', e.target.value)} placeholder="https://crm.example.com" /></Field>
+            <Field label="新账号默认角色" hint="SSO 首次同步建号时自动分配">
+              <select value={defaultRoleId} onChange={(e) => setDefaultRoleId(e.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-surface px-2.5 text-sm outline-none focus:border-primary">
+                <option value="">不分配</option>
+                {roles.map((r) => <option key={r.roleId} value={r.roleId}>{r.name}</option>)}
+              </select>
+            </Field>
+            <Field label="同步策略">
+              <div className="flex h-9 flex-col justify-center gap-1 text-sm text-text-weak">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input type="checkbox" checked={autoProvision} onChange={(e) => setAutoProvision(e.target.checked)} />
+                  同步即开通（关闭则需管理员逐个开通）
+                </label>
+              </div>
+            </Field>
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-text">
+              <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+              启用 SSO（登录页显示单点登录入口）
+            </label>
+            <Button variant="primary" onClick={save} disabled={busy}>保存配置</Button>
+          </div>
+
+          {/* SSO 同步账号：开通/停用 CRM 使用权限 */}
+          <div>
+            <div className="mb-1.5 text-sm font-medium text-text">SSO 同步账号（{ssoUsers.length}）</div>
+            {ssoUsers.length === 0 ? (
+              <p className="text-xs text-text-faint">员工首次 SSO 登录后自动同步到此；角色分配在 设置→角色/权限。</p>
+            ) : (
+              <div className="overflow-hidden rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-text-faint">
+                      <th className="px-3 py-2 font-normal">姓名</th>
+                      <th className="px-3 py-2 font-normal">账号/邮箱</th>
+                      <th className="px-3 py-2 font-normal">角色</th>
+                      <th className="px-3 py-2 font-normal">同步时间</th>
+                      <th className="px-3 py-2 font-normal">状态</th>
+                      <th className="px-3 py-2 font-normal">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ssoUsers.map((u) => (
+                      <tr key={u.userId} className="border-b border-border/50 last:border-0">
+                        <td className="px-3 py-2 font-medium text-text">{u.name}</td>
+                        <td className="px-3 py-2 text-xs text-text-weak">{u.username}{u.email ? ` · ${u.email}` : ''}</td>
+                        <td className="px-3 py-2 text-xs text-text-weak">{u.roles.join('、') || '未分配'}</td>
+                        <td className="px-3 py-2 text-xs text-text-faint">{u.syncedAt?.slice(0, 10) ?? '—'}</td>
+                        <td className="px-3 py-2"><StatusTag kind={u.status === 1 ? 'success' : 'warning'} label={u.status === 1 ? '已开通' : '待开通'} /></td>
+                        <td className="px-3 py-2">
+                          {u.status === 1
+                            ? <button onClick={() => toggleUser(u.userId, 0)} className="inline-flex items-center gap-1 text-xs text-danger"><UserX2 size={12} />停用</button>
+                            : <button onClick={() => toggleUser(u.userId, 1)} className="inline-flex items-center gap-1 text-xs text-success"><UserCheck2 size={12} />开通</button>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-text-faint">登录/SSO 登录/账号同步均写入审计日志（设置→日志审计）。停用即时吊销旧会话。</p>
+        </div>
+      )}
+    </Card>
   );
 }
 

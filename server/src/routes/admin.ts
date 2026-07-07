@@ -176,6 +176,93 @@ adminRouter.post('/integrations/ai/test', requirePermission('system.integration'
   }
 }));
 
+// ---------- 集成配置：SSO 单点登录（OIDC；凭据仅存数据库） ----------
+adminRouter.get('/integrations/sso', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const g = (k: string) => getSetting(orgId, k);
+  const [enabled, name, authorizeUrl, tokenUrl, userinfoUrl, clientId, clientSecret, scope, callbackUrl, frontendUrl, autoProvision, defaultRoleId] =
+    await Promise.all([
+      g('sso.enabled'), g('sso.name'), g('sso.authorizeUrl'), g('sso.tokenUrl'), g('sso.userinfoUrl'),
+      g('sso.clientId'), g('sso.clientSecret'), g('sso.scope'), g('sso.callbackUrl'), g('sso.frontendUrl'),
+      g('sso.autoProvision'), g('sso.defaultRoleId'),
+    ]);
+  ok(res, {
+    enabled: enabled === '1',
+    name: name ?? '', authorizeUrl: authorizeUrl ?? '', tokenUrl: tokenUrl ?? '', userinfoUrl: userinfoUrl ?? '',
+    clientId: clientId ?? '', clientSecretMasked: mask(clientSecret), scope: scope ?? 'openid profile email',
+    callbackUrl: callbackUrl ?? '', frontendUrl: frontendUrl ?? '',
+    autoProvision: autoProvision !== '0', defaultRoleId: defaultRoleId ? Number(defaultRoleId) : null,
+  });
+}));
+
+const ssoSchema = z.object({
+  enabled: z.boolean(),
+  name: z.string().optional(),
+  authorizeUrl: z.string().url(),
+  tokenUrl: z.string().url(),
+  userinfoUrl: z.string().url(),
+  clientId: z.string().min(1),
+  clientSecret: z.string().optional(),           // 留空=不更换
+  scope: z.string().optional(),
+  callbackUrl: z.string().url(),
+  frontendUrl: z.string().url().optional().or(z.literal('')),
+  autoProvision: z.boolean().default(true),
+  defaultRoleId: z.coerce.number().int().positive().nullish(),
+});
+adminRouter.put('/integrations/sso', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const d = ssoSchema.parse(req.body);
+  const pairs: [string, string | null][] = [
+    ['sso.enabled', d.enabled ? '1' : '0'],
+    ['sso.name', d.name?.trim() || null],
+    ['sso.authorizeUrl', d.authorizeUrl.trim()],
+    ['sso.tokenUrl', d.tokenUrl.trim()],
+    ['sso.userinfoUrl', d.userinfoUrl.trim()],
+    ['sso.clientId', d.clientId.trim()],
+    ['sso.scope', d.scope?.trim() || null],
+    ['sso.callbackUrl', d.callbackUrl.trim()],
+    ['sso.frontendUrl', d.frontendUrl?.trim() || null],
+    ['sso.autoProvision', d.autoProvision ? '1' : '0'],
+    ['sso.defaultRoleId', d.defaultRoleId ? String(d.defaultRoleId) : null],
+  ];
+  if (d.clientSecret?.trim()) pairs.push(['sso.clientSecret', d.clientSecret.trim()]);
+  for (const [k, v] of pairs) await setSetting(orgId, k, v);
+  ok(res, { ok: true });
+}));
+
+// SSO 同步账号列表：开通/停用 CRM 使用权限（角色分配在 设置→角色/权限）
+adminRouter.get('/integrations/sso/users', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const rows = await query(
+    `SELECT u.user_id, u.name, u.username, u.email_login, u.status, u.sso_provider, u.sso_synced_at, u.last_login_at,
+            COALESCE(array_agg(r.name) FILTER (WHERE r.name IS NOT NULL), '{}') AS role_names
+     FROM app_user u
+     LEFT JOIN user_role ur ON ur.user_id = u.user_id
+     LEFT JOIN role r ON r.role_id = ur.role_id
+     WHERE u.organization_id=$1 AND u.sso_sub IS NOT NULL
+     GROUP BY u.user_id ORDER BY u.sso_synced_at DESC NULLS LAST`,
+    [orgId],
+  );
+  ok(res, rows.map((r: any) => ({
+    userId: Number(r.user_id), name: r.name, username: r.username ?? '', email: r.email_login ?? '',
+    status: r.status, provider: r.sso_provider ?? '', syncedAt: r.sso_synced_at, lastLoginAt: r.last_login_at,
+    roles: r.role_names ?? [],
+  })));
+}));
+
+adminRouter.put('/integrations/sso/users/:id', requirePermission('system.integration'), ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const status = Number(req.body?.status);
+  if (![0, 1].includes(status)) return fail(res, 'status 需为 0(停用)/1(开通)');
+  const r = await one(
+    `UPDATE app_user SET status=$1::smallint, token_version = token_version + CASE WHEN $1::int = 0 THEN 1 ELSE 0 END
+     WHERE user_id=$2 AND organization_id=$3 AND sso_sub IS NOT NULL RETURNING user_id`,
+    [status, req.params.id, orgId],
+  );
+  if (!r) return fail(res, 'SSO 账号不存在', 1, 404);
+  ok(res, { ok: true });
+}));
+
 // ---------- 日志审计（system.audit）----------
 adminRouter.post('/audit-logs', requirePermission('system.audit'), ah(async (req, res) => {
   const { orgId } = ctx(req);

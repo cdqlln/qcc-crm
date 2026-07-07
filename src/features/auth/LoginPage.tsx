@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { LogIn, ScanLine, ShieldCheck } from 'lucide-react';
+import { KeyRound, LogIn, ScanLine, ShieldCheck } from 'lucide-react';
 import { authApi, IS_API_MODE } from '@/api/auth';
 import { useAuth } from '@/store/auth';
 import { Button } from '@/components/ui/primitives';
@@ -23,6 +23,30 @@ export function LoginPage() {
   useEffect(() => {
     if (isAuthed) navigate(redirect, { replace: true });
   }, [isAuthed, navigate, redirect]);
+
+  // SSO：探测是否启用（显示按钮）+ 处理 IdP 回跳参数
+  const [sso, setSso] = useState<{ enabled: boolean; name: string } | null>(null);
+  useEffect(() => { authApi.ssoStatus().then(setSso).catch(() => setSso(null)); }, []);
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const ssoError = qs.get('ssoError');
+    const access = qs.get('ssoAccess');
+    const refresh = qs.get('ssoRefresh');
+    if (ssoError) { setErr(ssoError); window.history.replaceState(null, '', '/login'); return; }
+    if (access && refresh) {
+      window.history.replaceState(null, '', '/login');
+      // 用签发的令牌拉取当前用户，落地会话
+      (async () => {
+        try {
+          useAuth.getState().setSession({ accessToken: access, refreshToken: refresh, user: null as any });
+          const me = await authApi.me();
+          useAuth.getState().setSession({ accessToken: access, refreshToken: refresh, user: me as any });
+          navigate(redirect, { replace: true });
+        } catch { setErr('SSO 会话建立失败，请重试'); }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onLogin = async () => {
     setErr('');
@@ -131,6 +155,13 @@ export function LoginPage() {
               <ScanLine size={15} className="text-[#07C160]" />
               {wecomLoading ? '等待企业微信授权…' : '企业微信登录'}
             </Button>
+
+            {sso?.enabled && (
+              <Button className="w-full" onClick={() => { window.location.href = authApi.ssoLoginUrl(); }}>
+                <KeyRound size={15} className="text-primary" />
+                {sso.name || '企业 SSO'} 单点登录
+              </Button>
+            )}
 
             <p className="pt-2 text-center text-xs text-text-faint">
               演示账号：admin / crm123456（更多：lina、wangfang…）

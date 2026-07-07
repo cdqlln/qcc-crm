@@ -211,5 +211,13 @@ export const integrationsApi = {
     return delay({ ok: true });
   },
   clearAi: () => { aiCfg = null; return delay({ ok: true }); },
+  // Mock SSO（演示配置；真实 OIDC 流程需部署后端）
+  sso: () => delay<import('@/types').SsoCfgView>({
+    enabled: false, name: '企业 SSO', authorizeUrl: '', tokenUrl: '', userinfoUrl: '', clientId: '',
+    clientSecretMasked: '', scope: 'openid profile email', callbackUrl: '', frontendUrl: '', autoProvision: true, defaultRoleId: 1,
+  }),
+  saveSso: (_input: unknown) => delay({ ok: true }),
+  ssoUsers: () => delay<import('@/types').SsoUser[]>([]),
+  setSsoUserStatus: (_userId: number, _status: 0 | 1) => delay({ ok: true }),
   testAi: () => delay({ ok: true, model: aiCfg?.model ?? '', sample: 'Mock 模式无法调用真实模型，请部署后端后测试。' }),
 };
