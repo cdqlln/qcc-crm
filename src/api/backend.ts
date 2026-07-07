@@ -172,10 +172,18 @@ export const paymentsApi = {
 export const invoicesApi = { list: (p: ListParams) => list<Invoice>('/invoices/list', p) };
 export const preCreditsApi = { list: (p: ListParams) => list<PreCredit>('/pre-credits/list', p) };
 
+/** 产品维护入参：maxGiftQty/maxGiftRatio 传 null 表示清除上限（不限） */
+export type ProductInput = Omit<Partial<Product>, 'maxGiftQty' | 'maxGiftRatio'> & {
+  maxGiftQty?: number | null;
+  maxGiftRatio?: number | null;
+};
+
 export const productsApi = {
   list: (p: ListParams) => list<Product>('/products/list', p),
   all: () => get<Product[]>('/products'),
   tiers: (id: number) => get<import('@/types').ProductTier[]>(`/products/${id}/tiers`),
+  create: (input: ProductInput) => post<Product>('/products', input),
+  update: (id: number, input: ProductInput) => put<Product>(`/products/${id}`, input),
 };
 
 export const tasksApi = {

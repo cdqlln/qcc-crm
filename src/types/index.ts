@@ -440,6 +440,9 @@ export interface Product {
   cost: string;
   minDiscount: string;
   maxDiscount: string;
+  allowGift?: boolean;    // 赠送策略：是否允许赠送
+  maxGiftQty?: number;    // 每订单最大赠送数量（空=不限）
+  maxGiftRatio?: number;  // 赠送原价占订单金额上限 %（空=不限）
 }
 
 export interface ProductTier {

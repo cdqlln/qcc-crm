@@ -92,6 +92,34 @@ function otherChargesSum(d: { otherChargesItems?: { amount: number }[]; otherCha
   return d.otherCharges;
 }
 
+// 赠送策略校验（事务内，违规抛错回滚）：产品是否允许赠送 / 每订单最大赠送数量 / 赠送原价占订单金额比例上限
+async function enforceGiftPolicy(client: any, quotationId: number, lines: any[]) {
+  const giftLines = lines.filter((l) => l.gift);
+  if (!giftLines.length) return;
+  const ids = [...new Set(giftLines.map((l) => Number(l.productId)))];
+  const prods = (await client.query(
+    `SELECT product_id, name, allow_gift, max_gift_qty, max_gift_ratio FROM product WHERE product_id = ANY($1)`, [ids],
+  )).rows;
+  const q = (await client.query(`SELECT amount FROM quotation WHERE quotation_id=$1`, [quotationId])).rows[0];
+  const orderAmount = Number(q?.amount ?? 0);
+  for (const p of prods) {
+    const rows = giftLines.filter((l) => Number(l.productId) === Number(p.product_id));
+    const qty = rows.reduce((s: number, l: any) => s + Number(l.quantity), 0);
+    const giftValue = rows.reduce((s: number, l: any) => s + Number(l.price) * Number(l.quantity), 0); // 赠送原价合计
+    if (!p.allow_gift) throw new Error(`「${p.name}」不允许作为赠送项目`);
+    if (p.max_gift_qty != null && qty > Number(p.max_gift_qty)) {
+      throw new Error(`「${p.name}」每订单最多赠送 ${p.max_gift_qty}，当前 ${qty}`);
+    }
+    if (p.max_gift_ratio != null) {
+      if (orderAmount <= 0) throw new Error(`「${p.name}」设有赠送金额占比上限（${p.max_gift_ratio}%），订单金额为 0 时不能赠送`);
+      const ratio = (giftValue / orderAmount) * 100;
+      if (ratio > Number(p.max_gift_ratio) + 1e-9) {
+        throw new Error(`「${p.name}」赠送金额占比 ${ratio.toFixed(1)}% 超过上限 ${p.max_gift_ratio}%（赠送原价 ¥${giftValue.toLocaleString()} / 订单 ¥${orderAmount.toLocaleString()}）`);
+      }
+    }
+  }
+}
+
 async function writeLines(client: any, quotationId: number, lines: any[]) {
   await client.query(`DELETE FROM quotation_product WHERE quotation_id=$1`, [quotationId]);
   for (const l of lines) {
@@ -139,6 +167,7 @@ quotationsRouter.post(
          d.contractTerm ?? null, d.remark ?? null, d.serviceYears ?? null],
       )).rows[0];
       await writeLines(c, q.quotation_id, d.lines);
+      await enforceGiftPolicy(c, q.quotation_id, d.lines);
       return q.quotation_id;
     });
     const row = await one(`SELECT q.*, c.name customer_name FROM quotation q LEFT JOIN customer c ON c.customer_id=q.customer_id WHERE q.quotation_id=$1`, [id]);
@@ -169,6 +198,7 @@ quotationsRouter.put(
          d.remark ?? null, d.serviceYears ?? null],
       );
       await writeLines(c, Number(req.params.id), d.lines);
+      await enforceGiftPolicy(c, Number(req.params.id), d.lines);
     });
     const row = await one(`SELECT q.*, c.name customer_name FROM quotation q LEFT JOIN customer c ON c.customer_id=q.customer_id WHERE q.quotation_id=$1`, [req.params.id]);
     ok(res, mapQuotation(row));

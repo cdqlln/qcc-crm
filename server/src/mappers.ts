@@ -257,6 +257,9 @@ export const mapProduct = (r: any) => ({
   cost: r.cost,
   minDiscount: r.min_discount,
   maxDiscount: r.max_discount,
+  allowGift: r.allow_gift ?? true,
+  maxGiftQty: r.max_gift_qty ?? undefined,
+  maxGiftRatio: r.max_gift_ratio != null ? Number(r.max_gift_ratio) : undefined,
 });
 
 export const mapProductTier = (r: any) => ({

@@ -26,6 +26,7 @@ import type {
   Opportunity,
   Payment,
   PreCredit,
+  Product,
   Quotation,
   Term,
 } from '@/types';
@@ -712,6 +713,23 @@ export const preCreditsApi = {
 
 // ---------- 产品 §6.8 ----------
 export const productsApi = {
+  create: (input: import('./backend').ProductInput) => {
+    const id = nextId(products, 'productId');
+    const row = {
+      productId: id, code: `P${String(id).padStart(4, '0')}`, categoryId: 1, categoryName: '基础服务',
+      spec: '标准版', unit: '套', timeLimits: 12, kind: 2, deliveryType: 3, active: true, freePricing: false,
+      price: '0', cost: '0', minDiscount: '0.70', maxDiscount: '1.00', allowGift: true,
+      ...input, name: input.name ?? '未命名产品',
+      maxGiftQty: input.maxGiftQty ?? undefined, maxGiftRatio: input.maxGiftRatio ?? undefined,
+    } as Product;
+    products.push(row);
+    return delay(row);
+  },
+  update: (id: number, input: import('./backend').ProductInput) => {
+    const prod = products.find((x) => x.productId === id);
+    if (prod) Object.assign(prod, { ...input, maxGiftQty: input.maxGiftQty ?? undefined, maxGiftRatio: input.maxGiftRatio ?? undefined });
+    return delay({ ...prod } as Product);
+  },
   list: (p: ListParams) => paginate(products, p, ['name', 'code']),
   all: () => delay(products),
   tiers: (id: number) => delay(productTiers[id] ?? []),
