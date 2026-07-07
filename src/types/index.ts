@@ -186,6 +186,8 @@ export interface TrackingInput {
   nextTrackingDate?: string;
   priorityLevel?: number;
   attachments?: Attachment[];
+  businessType?: 0 | 1 | 3; // 来源：0线索 1客户 3商机
+  businessId?: number;      // 商机跟进=opportunityId
 }
 
 /** customer_tracking 跟进记录 */
@@ -202,6 +204,7 @@ export interface Tracking {
   attachments?: Attachment[];
   createBy: number;
   createDate: string;
+  sourceName?: string; // 商机跟进：商机名称（来源标注）
 }
 
 export interface Opportunity {

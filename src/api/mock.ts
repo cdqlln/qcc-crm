@@ -349,7 +349,11 @@ export const customersApi = {
     delay(
       trackings
         .filter((t) => t.customerId === customerId)
-        .sort((a, b) => b.createDate.localeCompare(a.createDate)),
+        .sort((a, b) => b.createDate.localeCompare(a.createDate))
+        .map((t) => ({
+          ...t,
+          sourceName: t.businessType === 3 ? opportunities.find((o) => o.opportunityId === t.businessId)?.name : undefined,
+        })),
     ),
   activities: (customerId: number) => {
     const ev: { kind: string; title: string; summary: string; operator?: string; date: string }[] = [];
@@ -374,9 +378,11 @@ export const customersApi = {
     ev.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
     return delay(ev.slice(0, 100));
   },
-  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number; attachments?: any[] }) => {
+  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number; attachments?: any[]; businessType?: 0 | 1 | 3; businessId?: number }) => {
     const row: any = {
-      trackingId: nextId(trackings, 'trackingId'), customerId, businessType: 1, trackingType: input.trackingType,
+      trackingId: nextId(trackings, 'trackingId'), customerId,
+      businessType: input.businessType ?? 1, businessId: input.businessType === 3 ? input.businessId : undefined,
+      trackingType: input.trackingType,
       comment: input.comment, nextTrackingDate: input.nextTrackingDate, priorityLevel: input.priorityLevel ?? 1,
       attachments: input.attachments ?? [],
       createBy: 1, createDate: dayjs().toISOString(),

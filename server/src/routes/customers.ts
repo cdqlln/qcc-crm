@@ -204,8 +204,14 @@ customersRouter.delete('/org-nodes/:id', ah(async (req, res) => {
 customersRouter.get(
   '/customers/:id/trackings',
   ah(async (req, res) => {
-    const rows = await query(`SELECT * FROM customer_tracking WHERE customer_id=$1 ORDER BY created_at DESC`, [req.params.id]);
-    ok(res, rows.map(mapTracking));
+    // 汇总客户下所有跟进（客户/线索阶段/商机），带来源标注（商机名）
+    const rows = await query(
+      `SELECT t.*, o.name AS opportunity_name FROM customer_tracking t
+       LEFT JOIN opportunity o ON t.business_type=3 AND o.opportunity_id=t.business_id
+       WHERE t.customer_id=$1 ORDER BY t.created_at DESC`,
+      [req.params.id],
+    );
+    ok(res, rows.map((r: any) => ({ ...mapTracking(r), sourceName: r.opportunity_name ?? undefined })));
   }),
 );
 
@@ -253,10 +259,20 @@ customersRouter.post(
     const nextDate = req.body?.nextTrackingDate || null;
     const priority = req.body?.priorityLevel ? Number(req.body.priorityLevel) : 1;
     const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments : [];
+    // 来源标注：0线索 1客户 3商机（businessId=商机ID）；商机跟进校验归属本客户
+    const businessType = [0, 1, 3].includes(Number(req.body?.businessType)) ? Number(req.body.businessType) : 1;
+    let businessId: number | null = req.body?.businessId ? Number(req.body.businessId) : null;
+    if (businessType === 3) {
+      const opp = await one<any>(`SELECT opportunity_id FROM opportunity WHERE opportunity_id=$1 AND customer_id=$2 AND organization_id=$3`,
+        [businessId, cid, orgId]);
+      if (!opp) return fail(res, '商机不存在或不属于该客户');
+    } else {
+      businessId = null;
+    }
     const row = await one(
-      `INSERT INTO customer_tracking (organization_id, customer_id, business_type, tracking_type_term, comment, next_tracking_at, priority_level, attachments, created_by)
-       VALUES ($1,$2,1,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [orgId, cid, trackingType, comment, nextDate, priority, JSON.stringify(attachments), userId],
+      `INSERT INTO customer_tracking (organization_id, customer_id, business_type, business_id, tracking_type_term, comment, next_tracking_at, priority_level, attachments, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [orgId, cid, businessType, businessId, trackingType, comment, nextDate, priority, JSON.stringify(attachments), userId],
     );
     await one(`UPDATE customer SET tracking_num = tracking_num + 1, tracking_update_at = now(), next_tracking_at=$2 WHERE customer_id=$1`, [cid, nextDate]);
     // 有下次跟进时间 → 生成跟进计划待办（business_type=10）

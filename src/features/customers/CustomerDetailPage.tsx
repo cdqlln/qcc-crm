@@ -35,6 +35,7 @@ import { LeadOriginDialog } from './LeadOriginDialog';
 import { CustomerOrgTab } from './CustomerOrgTab';
 import { ComboInput } from '@/components/ui/ComboInput';
 import { OwnerTrace } from '@/components/ui/OwnerTrace';
+import { FollowUpForm } from '@/components/ui/FollowUpForm';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -55,6 +56,7 @@ export function CustomerDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [leadOriginOpen, setLeadOriginOpen] = useState(false);
   const term = useTerm();
+  const qcGlobal = useQueryClient();
 
   const { data: cust, isLoading } = useQuery({ queryKey: ['customer', cid], queryFn: () => customersApi.get(cid) });
   const { data: contactList = [] } = useQuery({ queryKey: ['contacts', cid], queryFn: () => customersApi.contacts(cid) });
@@ -109,7 +111,7 @@ export function CustomerDetailPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => setEditOpen(true)}><Pencil size={14} />编辑</Button>
-            <Button onClick={() => toast('已打开新增跟进', 'info')}><CalendarPlus size={14} />加跟进</Button>
+            <Button onClick={() => setTab('tracking')}><CalendarPlus size={14} />加跟进</Button>
             <Button onClick={() => openCreate('opportunity', { customerId: cid })}><PlusCircle size={14} />建商机</Button>
             <Button onClick={() => navigate('/quotations/new')}><FilePlus2 size={14} />建报价</Button>
             <Button onClick={() => toast('已签到', 'success')}><MapPin size={14} />签到</Button>
@@ -165,23 +167,37 @@ export function CustomerDetailPage() {
           {tab === 'org' && <CustomerOrgTab customerId={cid} />}
 
           {tab === 'tracking' && (
-            trackList.length === 0 ? <EmptyState title="暂无跟进记录" /> : (
-              <Timeline
-                items={trackList.map((t) => ({
-                  id: t.trackingId,
-                  kind: t.priorityLevel === 2 ? 'neutral' : 'info',
-                  title: term.name(t.trackingType),
-                  meta: `${userName(t.createBy)} · ${formatDate(t.createDate, 'MM-DD HH:mm')}`,
-                  body: (
-                    <div>
-                      <p>{t.comment}</p>
-                      <Attachments items={t.attachments} />
-                      {t.nextTrackingDate && <p className="mt-1 text-xs text-warning">下次跟进：{formatDate(t.nextTrackingDate)}</p>}
-                    </div>
-                  ),
-                }))}
-              />
-            )
+            <div>
+              {/* 客户/线索/商机三处跟进全部汇总于此，按来源标注 */}
+              <FollowUpForm customerId={cid} businessType={1} onDone={() => {
+                qcGlobal.invalidateQueries({ queryKey: ['trackings', cid] });
+                qcGlobal.invalidateQueries({ queryKey: ['customer', cid] });
+                qcGlobal.invalidateQueries({ queryKey: ['task-counts'] });
+              }} />
+              {trackList.length === 0 ? <EmptyState title="暂无跟进记录" /> : (
+                <Timeline
+                  items={trackList.map((t) => ({
+                    id: t.trackingId,
+                    kind: t.priorityLevel === 2 ? 'neutral' : 'info',
+                    title: (
+                      <span className="inline-flex items-center gap-1.5">
+                        {term.name(t.trackingType) || '跟进'}
+                        {t.businessType === 0 && <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium text-warning">线索阶段</span>}
+                        {t.businessType === 3 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-[10px] font-medium text-primary">商机{t.sourceName ? `·${t.sourceName}` : ''}</span>}
+                      </span>
+                    ) as any,
+                    meta: `${userName(t.createBy)} · ${formatDate(t.createDate, 'MM-DD HH:mm')}`,
+                    body: (
+                      <div>
+                        <p>{t.comment}</p>
+                        <Attachments items={t.attachments} />
+                        {t.nextTrackingDate && <p className="mt-1 text-xs text-warning">下次跟进：{formatDate(t.nextTrackingDate)}</p>}
+                      </div>
+                    ),
+                  }))}
+                />
+              )}
+            </div>
           )}
 
           {tab === 'opportunities' && <OppMini rows={custOpps} onRow={(r) => navigate(`/opportunities/${r.opportunityId}`)} />}
