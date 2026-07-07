@@ -329,6 +329,11 @@ export const orgApi = {
 import type { CustomerGroup } from '@/types';
 export const groupsApi = {
   list: () => get<CustomerGroup[]>('/customer-groups'),
+  // 工商所属集团候选（API 实时获取；多个默认第一个，可改选）
+  candidates: (customerId: number) =>
+    get<{ enabled: boolean; failed: boolean; candidates: { groupKeyNo: string; groupName: string }[] }>(`/customers/${customerId}/group-candidates`),
+  attach: (customerId: number, input: { groupKeyNo: string; groupName: string }) =>
+    post<{ groupId: number; groupName: string }>(`/customers/${customerId}/attach-group`, input),
   create: (input: { name: string; matchKey?: string; refCompanyId?: string }) => post<{ groupId: number; attached: number }>('/customer-groups', input),
   update: (id: number, input: { name: string; matchKey?: string }) => put(`/customer-groups/${id}`, input),
   remove: (id: number) => req(`/customer-groups/${id}`, { method: 'DELETE' }),

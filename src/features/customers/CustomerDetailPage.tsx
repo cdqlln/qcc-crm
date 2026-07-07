@@ -488,6 +488,23 @@ function GroupDialog({ cust, onClose }: { cust: Customer; onClose: () => void })
   const qc = useQueryClient();
   const toast = useUI((s) => s.toast);
   const { data: groups = [] } = useQuery({ queryKey: ['groups'], queryFn: () => groupsApi.list() });
+  // 工商所属集团候选（API）：多个默认第一个，可改选
+  const { data: cand, isFetching: candLoading } = useQuery({
+    queryKey: ['group-candidates', cust.customerId],
+    queryFn: () => groupsApi.candidates(cust.customerId),
+  });
+  const [pickedKey, setPickedKey] = useState<string | null>(null);
+  const effectivePicked = pickedKey ?? cand?.candidates?.[0]?.groupKeyNo ?? null; // 默认第一个
+  const attachFromApi = async () => {
+    const g = cand?.candidates.find((x) => x.groupKeyNo === effectivePicked);
+    if (!g) return;
+    const r = await groupsApi.attach(cust.customerId, g);
+    toast(`已按工商关系归集到「${r.groupName}」`, 'success');
+    qc.invalidateQueries({ queryKey: ['customer', cust.customerId] });
+    qc.invalidateQueries({ queryKey: ['groups'] });
+    qc.invalidateQueries({ queryKey: ['group-members'] });
+    onClose();
+  };
   const [groupId, setGroupId] = useState<string>(cust.groupId ? String(cust.groupId) : '');
   const [newName, setNewName] = useState('');
   const [matchKey, setMatchKey] = useState('');
@@ -507,6 +524,31 @@ function GroupDialog({ cust, onClose }: { cust: Customer; onClose: () => void })
     <Dialog open onClose={onClose} title="调整集团归属" width="w-[460px]"
       footer={<><Button onClick={onClose}>取消</Button><Button variant="primary" onClick={save}>保存</Button></>}>
       <div className="space-y-4">
+        {/* 工商所属集团（API 实时获取） */}
+        <div className="rounded-md border border-border p-3">
+          <div className="mb-1.5 text-sm font-medium text-text">工商所属集团（API）</div>
+          {candLoading ? (
+            <div className="text-xs text-text-faint">正在查询企查查…</div>
+          ) : !cand?.enabled ? (
+            <div className="text-xs text-text-faint">未配置企查查凭据，无法自动获取（可在下方人工选择/输入）</div>
+          ) : cand.failed ? (
+            <div className="text-xs text-warning">工商接口暂不可用（风控/网络），稍后重试或人工处理</div>
+          ) : cand.candidates.length === 0 ? (
+            <div className="text-xs text-text-faint">工商确认该企业不属于任何集团</div>
+          ) : (
+            <div className="space-y-1.5">
+              {cand.candidates.map((g, i) => (
+                <label key={g.groupKeyNo} className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="radio" name="qcc-group" checked={effectivePicked === g.groupKeyNo} onChange={() => setPickedKey(g.groupKeyNo)} />
+                  <span className="text-text">{g.groupName}</span>
+                  {i === 0 && <span className="rounded bg-primary-weak px-1.5 py-0.5 text-[10px] text-primary">API 默认</span>}
+                </label>
+              ))}
+              <Button size="sm" variant="primary" onClick={attachFromApi}>按选中集团归集</Button>
+            </div>
+          )}
+        </div>
+        <div className="text-center text-xs text-text-faint">或 人工选择 / 输入集团名称</div>
         <Field label="归属到现有集团">
           <Select value={groupId} onChange={(e) => { setGroupId(e.target.value); setNewName(''); }}>
             <option value="">（不归属 / 移出集团）</option>

@@ -123,10 +123,11 @@ export interface QccGroup {
 }
 
 /**
- * 查询企业所属集团（searchKey=统一社会信用代码或企业名称）。
- * 返回：QccGroup=有集团；null=确认无集团(201查空)；undefined=未配置/接口出错（调用方降级）。
+ * 查询企业所属集团（searchKey=统一社会信用代码或企业名称），可能命中多个集团。
+ * 返回：QccGroup[]=候选集团（多个时调用方默认第一个）；null=确认无集团(201查空)；
+ *       undefined=未配置/接口出错（调用方降级，不臆造）。
  */
-export async function belongGroup(orgId: number, searchKey: string): Promise<QccGroup | null | undefined> {
+export async function belongGroups(orgId: number, searchKey: string): Promise<QccGroup[] | null | undefined> {
   const cfg = await getQccCfg(orgId);
   if (!cfg.enabled || !searchKey.trim()) return undefined;
   const url = `${cfg.base}/BelongGroup/GetInfo?key=${encodeURIComponent(cfg.key)}&searchKey=${encodeURIComponent(searchKey)}`;
@@ -138,14 +139,25 @@ export async function belongGroup(orgId: number, searchKey: string): Promise<Qcc
       console.warn('[qcc] BelongGroup non-200:', body.Status, body.Message);
       return undefined; // 出错/风控（如 121 数据不能出境）→ 降级
     }
-    // 实测结构：Result.Data = {GroupId, Name, MainName, ActualControlName, Count...}
-    const r = body.Result?.Data ?? body.Result;
-    const groupName = r?.Name ?? r?.GroupName;
-    const groupKeyNo = r?.GroupId ?? r?.GroupKeyNo ?? (groupName ? `QCCGRP:${groupName}` : null);
-    if (!groupName || !groupKeyNo) return null;
-    return { groupKeyNo: String(groupKeyNo), groupName: String(groupName) };
+    // 实测结构：Result.Data = {GroupId, Name, MainName, ActualControlName, Count...}；部分企业可能返回多条（数组）
+    const raw = body.Result?.Data ?? body.Result;
+    const arr = Array.isArray(raw) ? raw : [raw];
+    const list: QccGroup[] = [];
+    for (const r of arr) {
+      const groupName = r?.Name ?? r?.GroupName;
+      const groupKeyNo = r?.GroupId ?? r?.GroupKeyNo ?? (groupName ? `QCCGRP:${groupName}` : null);
+      if (groupName && groupKeyNo) list.push({ groupKeyNo: String(groupKeyNo), groupName: String(groupName) });
+    }
+    return list.length ? list : null;
   } catch (e) {
     console.warn('[qcc] BelongGroup failed:', e instanceof Error ? e.message : e);
     return undefined; // 网络异常 → 降级
   }
+}
+
+/** 单集团口径（多候选默认第一个）：自动归集用 */
+export async function belongGroup(orgId: number, searchKey: string): Promise<QccGroup | null | undefined> {
+  const list = await belongGroups(orgId, searchKey);
+  if (list === null || list === undefined) return list;
+  return list[0] ?? null;
 }
