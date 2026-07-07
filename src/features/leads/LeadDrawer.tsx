@@ -13,6 +13,7 @@ import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
 import { TermTag, TermTags } from '@/components/ui/TermTag';
 import { Timeline } from '@/components/ui/Timeline';
 import { AiPanel } from '@/components/ai/AiPanel';
+import { OwnerTrace } from '@/components/ui/OwnerTrace';
 import { TableSkeleton } from '@/components/ui/states';
 import { useUI } from '@/store/ui';
 import { TERMS_BIZ } from '@/mock/terms';
@@ -118,6 +119,7 @@ export function LeadDrawer({
 
   function OverviewTab({ lead }: { lead: Customer }) {
     return (
+      <div className="space-y-5">
       <Descriptions
         items={[
           { label: '线索名称', value: lead.name },
@@ -138,6 +140,8 @@ export function LeadDrawer({
           { label: '创建时间', value: formatDate(lead.createDate) },
         ]}
       />
+      <OwnerTrace entityId={lead.customerId} types="lead,customer" />
+      </div>
     );
   }
 }

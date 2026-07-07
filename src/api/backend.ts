@@ -120,6 +120,7 @@ export const customersApi = {
     post<import('@/types').CustomerOrgNode>(`/customers/${customerId}/org-nodes`, input),
   renameOrgNode: (nodeId: number, name: string) => put(`/org-nodes/${nodeId}`, { name }),
   removeOrgNode: (nodeId: number) => req(`/org-nodes/${nodeId}`, { method: 'DELETE' }),
+  ownerLogs: (entityId: number, types: string) => get<import('@/types').OwnerLog[]>(`/owner-logs?entityId=${entityId}&types=${types}`),
   riskScan: (customerId: number) => post<{ tags: import('@/types').RiskTag[]; checkedAt: string }>(`/customers/${customerId}/risk-scan`),
   insight: (customerId: number) => get<import('@/types').CustomerInsightReport | null>(`/customers/${customerId}/insight`),
   generateInsight: (customerId: number) => post<import('@/types').CustomerInsightReport>(`/customers/${customerId}/insight`),

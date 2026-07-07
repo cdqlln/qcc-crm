@@ -112,6 +112,22 @@ export interface PoolOverview {
   }[];
 }
 
+/** 归属追溯：负责人变更记录 */
+export interface OwnerLog {
+  logId: number;
+  entityType: 'lead' | 'customer' | 'opportunity';
+  entityId: number;
+  fromUserId?: number | null;
+  fromName: string;
+  toUserId?: number | null;
+  toName: string;
+  via: 'init' | 'claim' | 'assign' | 'pool' | 'transfer' | 'edit' | 'unlink';
+  operatorId?: number | null;
+  operatorName: string;
+  remark: string;
+  createDate: string;
+}
+
 /** 线索转化留痕快照 */
 export interface LeadSnapshot {
   name: string;

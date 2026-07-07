@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { one, query, tx } from '../db.js';
+import { logOwnerChange } from '../services/ownerTrace.js';
 import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList } from '../list.js';
 import { pushMessage } from '../services/wecom.js';
@@ -158,6 +159,7 @@ async function onApprovalSettled(task: any, orgId: number, approved: boolean) {
   if (approved) {
     await one(`UPDATE customer SET pre_leader_id=$1, leader_id=$2 WHERE customer_id=$3`, [tr.from_user_id, tr.to_user_id, tr.customer_id]);
     await one(`UPDATE customer_transfer SET status=11 WHERE transfer_id=$1`, [tr.transfer_id]);
+    await logOwnerChange(orgId, 'customer', Number(tr.customer_id), tr.from_user_id, tr.to_user_id, 'transfer', tr.from_user_id, tr.reason ?? '移交审批通过');
     await pushMessage(orgId, tr.to_user_id, `客户已移交给你：${task.business_name}`, 8, tr.customer_id);
   } else {
     await one(`UPDATE customer_transfer SET status=3 WHERE transfer_id=$1`, [tr.transfer_id]);

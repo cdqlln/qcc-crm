@@ -34,6 +34,7 @@ import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
 import { LeadOriginDialog } from './LeadOriginDialog';
 import { CustomerOrgTab } from './CustomerOrgTab';
 import { ComboInput } from '@/components/ui/ComboInput';
+import { OwnerTrace } from '@/components/ui/OwnerTrace';
 import { TableSkeleton, EmptyState } from '@/components/ui/states';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { useUI } from '@/store/ui';
@@ -151,8 +152,9 @@ export function CustomerDetailPage() {
                 <CustomFieldsSection customerId={cid} values={cust.customFields} />
                 <GroupSection cust={cust} />
               </div>
-              <div>
+              <div className="space-y-5">
                 <RiskTagsSection cust={cust} />
+                <OwnerTrace entityId={cid} types="lead,customer" />
               </div>
             </div>
           )}

@@ -8,6 +8,7 @@ import { createApprovalTask } from './approvals.js';
 import { autoAttachGroup } from './groups.js';
 import { dataScopeCond } from '../auth.js';
 import { fuzzySearch, getQccCfg, riskScan } from '../services/qcc.js';
+import { listOwnerLogs, logOwnerChange } from '../services/ownerTrace.js';
 
 export const customersRouter = Router();
 
@@ -94,6 +95,15 @@ customersRouter.post('/customers/:id/risk-scan', ah(async (req, res) => {
   await one(`UPDATE customer SET risk_tags=$1, risk_checked_at=now() WHERE customer_id=$2 RETURNING customer_id`,
     [JSON.stringify(r.tags), cust.customer_id]);
   ok(res, { tags: r.tags, checkedAt: new Date().toISOString() });
+}));
+
+// 归属追溯：负责人变更历史（线索/客户/商机）
+customersRouter.get('/owner-logs', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const entityId = Number(req.query.entityId);
+  if (!entityId) return fail(res, '缺少 entityId');
+  const types = String(req.query.types ?? 'lead,customer').split(',').filter((t) => ['lead', 'customer', 'opportunity'].includes(t)) as any;
+  ok(res, await listOwnerLogs(orgId, entityId, types.length ? types : ['lead', 'customer']));
 }));
 
 const contactSchema = z.object({
@@ -391,6 +401,7 @@ customersRouter.post(
     // 按工商关系(企查查集团/实控人)自动归集；多公司同集团时自动归到一起
     const groupId = await autoAttachGroup(orgId, row.customer_id, d.name, d.refCompanyId);
     const g = groupId ? await one<any>(`SELECT name FROM customer_group WHERE group_id=$1`, [groupId]) : null;
+    await logOwnerChange(orgId, 'customer', row.customer_id, null, d.leaderId, 'init', userId, '新建客户');
     ok(res, mapCustomer({ ...row, group_id: groupId, group_name: g?.name }));
   }),
 );

@@ -5,6 +5,7 @@ import { ah, ctx, fail, ok, parseList } from '../http.js';
 import { runList, type FilterDef } from '../list.js';
 import { mapCustomer } from '../mappers.js';
 import { dataScopeCond, requirePermission } from '../auth.js';
+import { listOwnerLogs, logOwnerChange } from '../services/ownerTrace.js';
 
 export const leadsRouter = Router();
 
@@ -160,6 +161,8 @@ leadsRouter.post(
       [orgId, d.name, d.toPool ? 2 : 1, d.source, d.poolGroup ?? null, d.industry ?? null, d.province ?? null, d.city ?? null,
        d.phoneName ?? null, d.phone ?? null, d.toPool ? null : d.leaderId, userId],
     );
+    await logOwnerChange(orgId, 'lead', (row as any).customer_id, null, d.toPool ? null : d.leaderId!, 'init', userId,
+      d.toPool ? '新建进入线索池' : '新建线索');
     ok(res, mapCustomer(row));
   }),
 );
@@ -245,6 +248,15 @@ leadsRouter.put(
 );
 
 // 线索生命周期单条/批量动作（#5/#7）
+// 批量动作留痕：先取旧负责人再更新
+async function traceBulk(ids: number[], orgId: number, toUserId: number | null, via: 'claim' | 'assign' | 'pool', operatorId: number) {
+  if (!ids.length) return;
+  const rows = await query<any>(`SELECT customer_id, leader_id FROM customer WHERE customer_id = ANY($1) AND organization_id=$2`, [ids, orgId]);
+  for (const r of rows) {
+    await logOwnerChange(orgId, 'lead', Number(r.customer_id), r.leader_id ?? null, toUserId, via, operatorId);
+  }
+}
+
 async function actLeads(ids: number[], orgId: number, set: string, extra: unknown[] = []) {
   if (!ids.length) return [];
   const rows = await query(
@@ -261,6 +273,7 @@ const idsOf = (req: any): number[] => {
 // 领取（→个人线索，置跟进中，记领取时间）
 leadsRouter.post(['/leads/:id/claim', '/leads/claim'], ah(async (req, res) => {
   const { orgId, userId } = ctx(req);
+  await traceBulk(idsOf(req), orgId, userId, 'claim', userId);
   ok(res, await actLeads(idsOf(req), orgId, `category=1, leader_id=$1, status_term_id=18, claim_at=now()`, [userId]));
 }));
 // 接收（被分配后接受 → 跟进中）
@@ -276,6 +289,7 @@ leadsRouter.post(['/leads/:id/reject', '/leads/reject'], ah(async (req, res) => 
 // 退回线索池（→线索池，清负责人，未分配）
 leadsRouter.post(['/leads/:id/return-pool', '/leads/return-pool'], ah(async (req, res) => {
   const { orgId } = ctx(req);
+  await traceBulk(idsOf(req), orgId, null, 'pool', (req as any).user?.userId ?? null);
   ok(res, await actLeads(idsOf(req), orgId, `category=2, leader_id=NULL, status_term_id=15, back_sea_time=now()`));
 }));
 // 分配（单条/批量，记分配时间）
@@ -283,6 +297,7 @@ leadsRouter.post(['/leads/:id/assign', '/leads/assign'], requirePermission('lead
   const { orgId } = ctx(req);
   const toUserId = Number(req.body?.toUserId);
   if (!toUserId) return fail(res, '请选择分配对象');
+  await traceBulk(idsOf(req), orgId, toUserId, 'assign', (req as any).user?.userId ?? null);
   ok(res, await actLeads(idsOf(req), orgId, `category=1, leader_id=$1, status_term_id=16, assign_at=now()`, [toUserId]));
 }));
 
@@ -312,5 +327,6 @@ leadsRouter.post('/leads/:id/to-opportunity', ah(async (req, res) => {
     [orgId, code, name, c.customer_id, req.body?.estimatedAmount ?? '0', c.leader_id ?? userId],
   );
   await one(`UPDATE customer SET opportunity_count = opportunity_count + 1 WHERE customer_id=$1`, [c.customer_id]);
+  await logOwnerChange(orgId, 'opportunity', (opp as any).opportunity_id, null, c.leader_id ?? userId, 'init', userId, '线索直转商机');
   ok(res, { opportunityId: (opp as any).opportunity_id, code });
 }));
