@@ -16,3 +16,17 @@ UPDATE app_user SET username='chenjing', email_login='chenjing@qcc.com', wecom_u
 UPDATE app_user SET username='zhaolei',  email_login='zhaolei@qcc.com',  wecom_userid='WECOM_zhaolei'  WHERE user_id=6;
 UPDATE app_user SET username='sunyu',    email_login='sunyu@qcc.com',    wecom_userid='WECOM_sunyu'    WHERE user_id=7;
 UPDATE app_user SET username='zhoumin',  email_login='zhoumin@qcc.com',  wecom_userid='WECOM_zhoumin'  WHERE user_id=8;
+
+-- 角色授权兜底：全新库上迁移18/26执行时 role 尚未种子，这里在角色就绪后重放授权
+-- 管理员：全部权限
+INSERT INTO role_permission (role_id, permission_id)
+SELECT 3, permission_id FROM permission ON CONFLICT DO NOTHING;
+-- 销售主管：除系统类外全部
+INSERT INTO role_permission (role_id, permission_id)
+SELECT 2, permission_id FROM permission WHERE module IS DISTINCT FROM '系统' ON CONFLICT DO NOTHING;
+-- 销售员：核心查看 + 线索编辑/分配 + 报价编辑
+INSERT INTO role_permission (role_id, permission_id)
+SELECT 1, permission_id FROM permission
+WHERE code IN ('lead.view','lead.edit','lead.assign','lead.export','customer.view','customer.edit',
+               'opportunity.view','opportunity.edit','quotation.view','quotation.edit','contract.view','finance.view')
+ON CONFLICT DO NOTHING;

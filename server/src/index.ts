@@ -26,6 +26,7 @@ import { orgRouter } from './routes/org.js';
 import { uploadRouter, UPLOAD_DIR } from './routes/upload.js';
 import { adminRouter } from './routes/admin.js';
 import { groupsRouter } from './routes/groups.js';
+import { prospectingRouter } from './routes/prospecting.js';
 import { auditMiddleware } from './audit.js';
 import { authRouter } from './routes/auth.js';
 import { requireAuth } from './auth.js';
@@ -84,6 +85,7 @@ api.use(orgRouter);
 api.use(uploadRouter);
 api.use(adminRouter);
 api.use(groupsRouter);
+api.use(prospectingRouter);
 app.use('/api/crm', api);
 
 // 404

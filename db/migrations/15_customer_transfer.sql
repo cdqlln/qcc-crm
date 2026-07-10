@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS customer_transfer (
 CREATE INDEX IF NOT EXISTS ix_transfer_customer ON customer_transfer (customer_id, status);
 
 -- 客户移交审批路由（business_type=8）
+-- 全新库上 organization 由 seed 阶段创建（晚于 migrations），此处仅对存量库补数据；
+-- 全新库由 seed_collab.sql 中的同款插入兜底。
 INSERT INTO work_flow_route (organization_id, business_type, name, nodes)
 SELECT 1, 8, '客户移交审批', '[{"name":"销售主管审批","approverIds":[1]}]'
-WHERE NOT EXISTS (SELECT 1 FROM work_flow_route WHERE organization_id=1 AND business_type=8);
+WHERE EXISTS (SELECT 1 FROM organization WHERE organization_id = 1)
+  AND NOT EXISTS (SELECT 1 FROM work_flow_route WHERE organization_id=1 AND business_type=8);

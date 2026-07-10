@@ -11,6 +11,11 @@ INSERT INTO work_flow_route (organization_id, business_type, name, nodes) VALUES
  (1, 2, '合同审批流', '[{"name":"部门主管审批","approverIds":[1]},{"name":"大客户负责人审批","approverIds":[6]}]'),
  (1, 1, '报价审批流', '[{"name":"销售主管审批","approverIds":[1]}]');
 
+-- 客户移交审批（bt=8）：迁移15在全新库上因 org 尚未种子而跳过，这里兜底
+INSERT INTO work_flow_route (organization_id, business_type, name, nodes)
+SELECT 1, 8, '客户移交审批', '[{"name":"销售主管审批","approverIds":[1]}]'
+WHERE NOT EXISTS (SELECT 1 FROM work_flow_route WHERE organization_id=1 AND business_type=8);
+
 -- 示例工单
 INSERT INTO ticket (organization_id, code, title, type_term_id, customer_id, priority, status, assignee_id, creator_id, description) VALUES
  (1,'WO20260001','专业版无法登录',202,1,3,2,3,2,'客户反馈账号登录报错，需排查'),

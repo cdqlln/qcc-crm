@@ -12,6 +12,7 @@ import {
   FolderKanban,
   Handshake,
   LayoutDashboard,
+  Radar,
   Receipt,
   Settings,
   Sparkles,
@@ -47,6 +48,7 @@ export const NAV_GROUPS: NavGroup[] = [
     group: '销售',
     items: [
       { label: '线索', path: '/leads', icon: UserPlus },
+      { label: '商机开拓', path: '/prospecting', icon: Radar },
       { label: '客户', path: '/customers', icon: Users },
       { label: '商机', path: '/opportunities', icon: Briefcase },
       { label: '报价单', path: '/quotations', icon: Calculator },
