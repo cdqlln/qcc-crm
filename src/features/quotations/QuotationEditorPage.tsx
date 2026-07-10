@@ -36,6 +36,9 @@ interface Line {
   apiItems?: ApiQuoteItem[]; // 数据接口报价清单（选自价目表）
   apiMode?: 'calls' | 'recharge'; // 接口计费：calls=定量定价·合计计入总价 recharge=只调价·售价=充值金额
   gift?: boolean; // 赠送项目（折扣 0、实际单价 0；成本照记体现真实毛利）
+  allowGift?: boolean;   // 产品赠送策略：false=禁止赠送
+  maxGiftQty?: number;   // 每订单最大赠送数量（空=不限）
+  maxGiftRatio?: number; // 赠送原价占订单金额上限 %（空=不限）
 }
 
 // 定量计费：接口合计 = Σ 调用量×报价单价
@@ -114,6 +117,7 @@ export function QuotationEditorPage() {
           apiItems: l.apiItems,
           apiMode: l.apiMode,
           gift: l.gift,
+          allowGift: p?.allowGift, maxGiftQty: p?.maxGiftQty, maxGiftRatio: p?.maxGiftRatio,
         };
       }),
     );
@@ -145,6 +149,7 @@ export function QuotationEditorPage() {
       id: newId, productId: p.productId, productName: p.name, spec: p.spec, quantity: 1, price: p.price,
       discountRate: '1.00', cost: p.cost, minDiscount: p.minDiscount, salesDiscount: p.salesDiscount ?? '0.95', kind: p.kind,
       pricingMode: 'qty',
+      allowGift: p.allowGift, maxGiftQty: p.maxGiftQty, maxGiftRatio: p.maxGiftRatio,
     }]);
     if (p.kind === 1) {
       const tiers = await productsApi.tiers(p.productId);
@@ -249,6 +254,32 @@ export function QuotationEditorPage() {
       }
       if (l.apiMode === 'recharge' && Number(l.price) <= 0) {
         toast(`「${l.productName}」为充值计费，请填写充值金额作为售价`, 'error'); return null;
+      }
+    }
+    // 赠送策略校验（与后端一致）：禁止赠送 / 每订单最大数量 / 赠送原价占订单金额比例上限
+    const giftLines = lines.filter((l) => l.gift);
+    if (giftLines.length) {
+      const orderAmount = Number(calc.amount);
+      for (const pid of [...new Set(giftLines.map((l) => l.productId))]) {
+        const rows = giftLines.filter((l) => l.productId === pid);
+        const first = rows[0];
+        const qty = rows.reduce((s, l) => s + l.quantity, 0);
+        const giftValue = rows.reduce((s, l) => s + Number(l.price) * l.quantity, 0);
+        if (first.allowGift === false) {
+          toast(`「${first.productName}」按产品策略不允许作为赠送项目`, 'error'); return null;
+        }
+        if (first.maxGiftQty != null && qty > first.maxGiftQty) {
+          toast(`「${first.productName}」每订单最多赠送 ${first.maxGiftQty}，当前 ${qty}`, 'error'); return null;
+        }
+        if (first.maxGiftRatio != null) {
+          if (orderAmount <= 0) {
+            toast(`「${first.productName}」设置了赠送金额占比上限，订单需有正的应付金额才能赠送`, 'error'); return null;
+          }
+          const ratio = (giftValue / orderAmount) * 100;
+          if (ratio > first.maxGiftRatio + 1e-9) {
+            toast(`「${first.productName}」赠送金额占订单 ${ratio.toFixed(1)}%，超过上限 ${first.maxGiftRatio}%`, 'error'); return null;
+          }
+        }
       }
     }
     if (persistedId) { await quotationsApi.update(persistedId, payload()); return persistedId; }
@@ -531,12 +562,19 @@ export function QuotationEditorPage() {
                               {r.apiItems?.length ? `数据接口 ${r.apiItems.length} 项` : '+ 选择数据接口（价目表）'}
                             </button>
                           )}
-                          {/* 赠送开关：折扣 0、实际单价 0（不参与折扣权限校验，成本照记） */}
+                          {/* 赠送开关：折扣 0、实际单价 0（不参与折扣权限校验，成本照记）；受产品赠送策略约束 */}
                           <button
-                            onClick={() => update(r.id, { gift: !r.gift, discountRate: r.gift ? '1.00' : '0.0000' })}
+                            onClick={() => {
+                              if (!r.gift && r.allowGift === false) return toast(`「${r.productName}」按产品策略不允许作为赠送项目`, 'error');
+                              update(r.id, { gift: !r.gift, discountRate: r.gift ? '1.00' : '0.0000' });
+                            }}
                             className={cn('rounded border px-1.5 py-0.5 text-[10px]',
-                              r.gift ? 'border-success bg-success/10 text-success' : 'border-border text-text-weak hover:border-success/60 hover:text-success')}
-                            title={r.gift ? '取消赠送（恢复原价）' : '设为赠送项目（折扣 0、单价 0）'}
+                              r.gift ? 'border-success bg-success/10 text-success'
+                                : r.allowGift === false ? 'cursor-not-allowed border-border text-text-faint opacity-60'
+                                : 'border-border text-text-weak hover:border-success/60 hover:text-success')}
+                            title={r.gift ? '取消赠送（恢复原价）'
+                              : r.allowGift === false ? '该产品不允许赠送'
+                              : `设为赠送项目（折扣 0、单价 0）${r.maxGiftQty != null ? ` · 每单限 ${r.maxGiftQty}` : ''}${r.maxGiftRatio != null ? ` · 限订单金额 ${r.maxGiftRatio}%` : ''}`}
                           >
                             {r.gift ? '✓ 赠送' : '赠送'}
                           </button>

@@ -25,8 +25,10 @@ INSERT INTO app_user (user_id, organization_id, department_id, name, position) O
 -- ---- 角色 / 权限 ----
 INSERT INTO role (role_id, organization_id, name, scope) OVERRIDING SYSTEM VALUE VALUES
  (1,1,'销售员',1),(2,1,'销售主管',3),(3,1,'管理员',4);
+-- 权限点目录主要由迁移18/26建立（先于本 seed 执行），此处仅补充遗留码，冲突跳过
 INSERT INTO permission (permission_id, code, name, type) OVERRIDING SYSTEM VALUE VALUES
- (1,'customer.export','导出客户',10),(2,'money.view','查看金额',10),(3,'admin.all','全部管理',20);
+ (1,'customer.export','导出客户',10),(2,'money.view','查看金额',10),(3,'admin.all','全部管理',20)
+ON CONFLICT DO NOTHING;
 INSERT INTO user_role (user_id, role_id) VALUES (1,2),(2,1),(3,1),(4,2),(5,1),(6,2),(7,1),(8,1);
 
 -- ---- 字典 term（business_type 见 03_terms.sql 注释）----

@@ -13,7 +13,11 @@ import { TermTag } from '@/components/ui/TermTag';
 import { ApprovalBadge } from '@/components/ui/ApprovalBadge';
 import { AiPanel } from '@/components/ai/AiPanel';
 import { OwnerTrace } from '@/components/ui/OwnerTrace';
+import { FollowUpForm } from '@/components/ui/FollowUpForm';
+import { Attachments } from '@/components/ui/Attachments';
+import { customersApi } from '@/api/crm';
 import { TableSkeleton } from '@/components/ui/states';
+import { Timeline } from '@/components/ui/Timeline';
 import { useTerm } from '@/hooks/useTerms';
 import { useUI } from '@/store/ui';
 import { TERMS_BIZ } from '@/mock/terms';
@@ -98,9 +102,7 @@ export function OpportunityDrawer({ id, onClose }: { id: number; onClose: () => 
               主推产品：{opp.mainProduct}（opportunity_product 行项目，可继承至报价单）
             </div>
           )}
-          {tab === 'tracking' && (
-            <p className="py-8 text-center text-sm text-text-faint">该商机暂无独立跟进记录，请在客户详情查看完整时间线</p>
-          )}
+          {tab === 'tracking' && <OppTrackingTab customerId={opp.customerId} opportunityId={opp.opportunityId} />}
           {tab === 'ai' && (
             <div className="-mx-5 -mb-5 h-[520px]">
               <AiPanel businessType={3} businessId={id} stageId={opp.status} />
@@ -109,5 +111,40 @@ export function OpportunityDrawer({ id, onClose }: { id: number; onClose: () => 
         </div>
       )}
     </Drawer>
+  );
+}
+
+// 商机跟进：写入时标注来源（businessType=3），并汇总到客户跟进时间线
+function OppTrackingTab({ customerId, opportunityId }: { customerId: number; opportunityId: number }) {
+  const qc = useQueryClient();
+  const { data = [], isLoading } = useQuery({
+    queryKey: ['trackings', customerId],
+    queryFn: () => customersApi.trackings(customerId),
+  });
+  const mine = data.filter((t) => t.businessType === 3 && t.businessId === opportunityId);
+  return (
+    <div>
+      <FollowUpForm customerId={customerId} businessType={3} businessId={opportunityId}
+        onDone={() => { qc.invalidateQueries({ queryKey: ['trackings', customerId] }); qc.invalidateQueries({ queryKey: ['task-counts'] }); }} />
+      {isLoading ? <TableSkeleton rows={3} cols={1} /> : mine.length === 0 ? (
+        <p className="py-6 text-center text-sm text-text-faint">该商机暂无跟进记录（会同步汇总到客户跟进时间线）</p>
+      ) : (
+        <Timeline
+          items={mine.map((t) => ({
+            id: t.trackingId,
+            kind: t.priorityLevel === 2 ? 'neutral' : 'info',
+            title: '商机跟进',
+            meta: `${userName(t.createBy)} · ${formatDate(t.createDate, 'MM-DD HH:mm')}`,
+            body: (
+              <div>
+                <p>{t.comment}</p>
+                <Attachments items={t.attachments} />
+                {t.nextTrackingDate && <p className="mt-1 text-xs text-warning">下次跟进：{formatDate(t.nextTrackingDate)}</p>}
+              </div>
+            ),
+          }))}
+        />
+      )}
+    </div>
   );
 }

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm, type UseFormRegister, type FieldErrors } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { contractsApi, customers as customerStore, customersApi, leadsApi, opportunitiesApi, productsApi } from '@/api/crm';
+import { contractsApi, customersApi, leadsApi, opportunitiesApi, productsApi, uploadApi } from '@/api/crm';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/primitives';
 import { Field, Select, TextArea, TextInput } from '@/components/ui/form';
@@ -11,6 +11,8 @@ import { CompanyNameInput } from '@/components/ui/CompanyNameInput';
 import { EntitySearchSelect } from '@/components/ui/EntitySearchSelect';
 import { UserSearchSelect } from '@/components/ui/UserSearchSelect';
 import { RegionSelect } from '@/components/ui/RegionSelect';
+import { AttachmentDrafts } from '@/components/ui/Attachments';
+import { Paperclip } from 'lucide-react';
 import { useCreate, type CreatableEntity } from '@/store/create';
 import { useUI } from '@/store/ui';
 import { useAuth } from '@/store/auth';
@@ -95,31 +97,6 @@ function useOwner(watch: (n: any) => any, setValue: (n: any, v: any, o?: any) =>
   };
 }
 
-function CustomerSelect({
-  register,
-  errors,
-  defaultValue,
-}: {
-  register: UseFormRegister<any>;
-  errors: FieldErrors;
-  defaultValue?: number;
-}) {
-  const options = customerStore.filter((c) => c.category >= 3).slice(0, 200);
-  return (
-    <Field label="客户" required error={errors.customerId?.message as string}>
-      <Select invalid={!!errors.customerId} defaultValue={defaultValue ?? ''} {...register('customerId')}>
-        <option value="" disabled>
-          请选择客户
-        </option>
-        {options.map((c) => (
-          <option key={c.customerId} value={c.customerId}>
-            {c.name}
-          </option>
-        ))}
-      </Select>
-    </Field>
-  );
-}
 
 // ---------------- 线索 ----------------
 function LeadFormView({ preset }: { preset?: Record<string, unknown> }) {
@@ -446,11 +423,51 @@ function ContractFormView({ preset }: { preset?: Record<string, unknown> }) {
     defaultValues: { contractType: 1, renewType: 1, leaderId: me?.userId as any, ...(preset as any) },
   });
   const { ownerProps } = useOwner(watch, setValue);
+  const custId = watch('customerId');
+  const [custName, setCustName] = useState<string | undefined>(undefined);
+  // 创建方式：byCustomer 直接按客户 / byOpportunity 关联商机（列表接口按数据范围过滤：销售=自己的，部门负责人=本部门的）
+  const [mode, setMode] = useState<'byCustomer' | 'byOpportunity'>(preset?.opportunityId ? 'byOpportunity' : 'byCustomer');
+  const [oppKw, setOppKw] = useState('');
+  const oppId = watch('opportunityId');
+  const { data: oppPage } = useQuery({
+    queryKey: ['contract-opps', oppKw],
+    queryFn: () => opportunitiesApi.list({ page: 1, pageSize: 50, keyword: oppKw || undefined }),
+    enabled: mode === 'byOpportunity',
+  });
+  const pickOpp = (o: import('@/types').Opportunity) => {
+    setValue('opportunityId', o.opportunityId as any, { shouldValidate: true });
+    setValue('customerId', o.customerId as any, { shouldValidate: true });
+    setCustName(o.customerName);
+    const cur = (watch('name') ?? '').trim();
+    if (!cur) setValue('name', `${o.customerName ?? ''} 服务合同`);
+    if (!watch('amount')) setValue('amount', o.estimatedAmount as any);
+  };
+  // 到期日快捷：开始日期 + 一年/二年
+  const setExpiryQuick = (years: number) => {
+    const base = watch('beginDate') || new Date().toISOString().slice(0, 10);
+    const dte = new Date(base);
+    dte.setFullYear(dte.getFullYear() + years);
+    setValue('expiredDate', dte.toISOString().slice(0, 10), { shouldValidate: true });
+  };
+  // 合同文件（合同文本/扫描件）：随合同保存，供法务审核查阅
+  const [files, setFiles] = useState<import('@/types').Attachment[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (!picked.length) return;
+    setUploading(true);
+    try {
+      const up = await uploadApi.upload(picked);
+      setFiles((f) => [...f, ...up]);
+    } catch (err) { toast(err instanceof Error ? err.message : '上传失败', 'error'); }
+    finally { setUploading(false); }
+  };
 
   const onSubmit = async (data: ContractForm) => {
-    const row = await contractsApi.create(data as Record<string, unknown>);
+    const row = await contractsApi.create({ ...data, attachments: files } as Record<string, unknown>);
     qc.invalidateQueries({ queryKey: ['contracts'] });
-    toast(`合同「${data.name}」已创建`, 'success');
+    toast(files.length ? `合同「${data.name}」已创建（含 ${files.length} 个合同文件，可提交法务审核）` : `合同「${data.name}」已创建`, 'success');
     close();
     if (row) navigate(`/contracts/${row.contractId}`);
   };
@@ -461,7 +478,48 @@ function ContractFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="合同名称" required error={errors.name?.message} className="col-span-2">
           <TextInput invalid={!!errors.name} placeholder="如：某某客户·服务合同" {...register('name')} />
         </Field>
-        <CustomerSelect register={register} errors={errors} defaultValue={preset?.customerId as number} />
+        <Field label="创建方式" className="col-span-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-border">
+            {([['byCustomer', '按客户直接创建'], ['byOpportunity', '关联商机创建']] as const).map(([m, label]) => (
+              <button key={m} type="button" onClick={() => { setMode(m); if (m === 'byCustomer') setValue('opportunityId', undefined as any); }}
+                className={cn('px-3 py-1.5 text-sm', mode === m ? 'bg-primary text-white' : 'text-text-weak hover:text-text')}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
+        {mode === 'byOpportunity' ? (
+          <Field label="关联商机" required error={errors.customerId?.message as string} className="col-span-2"
+            hint="销售可选自己的商机；部门负责人可选本部门全部商机（按数据范围）">
+            <div className="space-y-1.5">
+              <TextInput placeholder="搜索商机名称 / 编号 / 客户…" value={oppKw} onChange={(e) => setOppKw(e.target.value)} />
+              <div className="max-h-40 overflow-y-auto rounded-md border border-border">
+                {(oppPage?.list ?? []).map((o) => (
+                  <button key={o.opportunityId} type="button" onClick={() => pickOpp(o)}
+                    className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-bg', Number(oppId) === o.opportunityId && 'bg-primary-weak text-primary')}>
+                    <span className="font-mono text-xs text-text-faint">{o.code}</span>
+                    <span className="min-w-0 flex-1 truncate">{o.name}</span>
+                    <span className="shrink-0 text-xs text-text-faint">{o.customerName} · ¥{Number(o.estimatedAmount).toLocaleString()}</span>
+                  </button>
+                ))}
+                {(oppPage?.list ?? []).length === 0 && <div className="px-3 py-3 text-center text-xs text-text-faint">无可选商机</div>}
+              </div>
+              {oppId && custName && <div className="text-xs text-success">已关联商机，客户：{custName}</div>}
+            </div>
+          </Field>
+        ) : (
+          <Field label="客户" required error={errors.customerId?.message as string} hint="可直接输入公司名称搜索，找出需要出合同的客户">
+            <EntitySearchSelect
+              value={custId ? Number(custId) : undefined}
+              valueName={custName}
+              invalid={!!errors.customerId}
+              onChange={(id, name) => {
+                setValue('customerId', (id ?? '') as any, { shouldValidate: true });
+                setCustName(name);
+              }}
+            />
+          </Field>
+        )}
         <Field label="合同金额" required error={errors.amount?.message}>
           <TextInput invalid={!!errors.amount} inputMode="decimal" placeholder="0.00" {...register('amount')} />
         </Field>
@@ -481,10 +539,25 @@ function ContractFormView({ preset }: { preset?: Record<string, unknown> }) {
         <Field label="开始日期" required error={errors.beginDate?.message}>
           <TextInput invalid={!!errors.beginDate} type="date" {...register('beginDate')} />
         </Field>
-        <Field label="到期日期" required error={errors.expiredDate?.message}>
-          <TextInput invalid={!!errors.expiredDate} type="date" {...register('expiredDate')} />
+        <Field label="到期日期" required error={errors.expiredDate?.message} hint="快捷：自开始日期起一年/二年">
+          <div className="space-y-1">
+            <TextInput invalid={!!errors.expiredDate} type="date" {...register('expiredDate')} />
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setExpiryQuick(1)} className="rounded border border-border px-1.5 py-0.5 text-[11px] text-text-weak hover:border-primary/50 hover:text-primary">一年</button>
+              <button type="button" onClick={() => setExpiryQuick(2)} className="rounded border border-border px-1.5 py-0.5 text-[11px] text-text-weak hover:border-primary/50 hover:text-primary">二年</button>
+            </div>
+          </div>
         </Field>
         <OwnerField {...ownerProps} error={errors.leaderId?.message as string} />
+        <Field label="合同文件" className="col-span-2" hint="上传合同文本/扫描件（PDF/Word/图片），供法务审核查阅">
+          <div className="space-y-2">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-text-weak hover:border-primary hover:text-primary">
+              <Paperclip size={14} />{uploading ? '上传中…' : '选择文件上传'}
+              <input type="file" multiple className="hidden" onChange={onPickFiles} accept=".pdf,.doc,.docx,image/*,.zip" />
+            </label>
+            <AttachmentDrafts items={files} onRemove={(i) => setFiles((f) => f.filter((_, x) => x !== i))} />
+          </div>
+        </Field>
       </div>
       <Footer onCancel={close} submitting={isSubmitting} />
     </form>

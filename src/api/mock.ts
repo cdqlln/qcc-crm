@@ -26,6 +26,7 @@ import type {
   Opportunity,
   Payment,
   PreCredit,
+  Product,
   Quotation,
   Term,
 } from '@/types';
@@ -349,7 +350,11 @@ export const customersApi = {
     delay(
       trackings
         .filter((t) => t.customerId === customerId)
-        .sort((a, b) => b.createDate.localeCompare(a.createDate)),
+        .sort((a, b) => b.createDate.localeCompare(a.createDate))
+        .map((t) => ({
+          ...t,
+          sourceName: t.businessType === 3 ? opportunities.find((o) => o.opportunityId === t.businessId)?.name : undefined,
+        })),
     ),
   activities: (customerId: number) => {
     const ev: { kind: string; title: string; summary: string; operator?: string; date: string }[] = [];
@@ -374,9 +379,11 @@ export const customersApi = {
     ev.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
     return delay(ev.slice(0, 100));
   },
-  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number; attachments?: any[] }) => {
+  createTracking: (customerId: number, input: { comment: string; trackingType?: number; nextTrackingDate?: string; priorityLevel?: number; attachments?: any[]; businessType?: 0 | 1 | 3; businessId?: number }) => {
     const row: any = {
-      trackingId: nextId(trackings, 'trackingId'), customerId, businessType: 1, trackingType: input.trackingType,
+      trackingId: nextId(trackings, 'trackingId'), customerId,
+      businessType: input.businessType ?? 1, businessId: input.businessType === 3 ? input.businessId : undefined,
+      trackingType: input.trackingType,
       comment: input.comment, nextTrackingDate: input.nextTrackingDate, priorityLevel: input.priorityLevel ?? 1,
       attachments: input.attachments ?? [],
       createBy: 1, createDate: dayjs().toISOString(),
@@ -706,6 +713,23 @@ export const preCreditsApi = {
 
 // ---------- 产品 §6.8 ----------
 export const productsApi = {
+  create: (input: import('./backend').ProductInput) => {
+    const id = nextId(products, 'productId');
+    const row = {
+      productId: id, code: `P${String(id).padStart(4, '0')}`, categoryId: 1, categoryName: '基础服务',
+      spec: '标准版', unit: '套', timeLimits: 12, kind: 2, deliveryType: 3, active: true, freePricing: false,
+      price: '0', cost: '0', minDiscount: '0.70', maxDiscount: '1.00', allowGift: true,
+      ...input, name: input.name ?? '未命名产品',
+      maxGiftQty: input.maxGiftQty ?? undefined, maxGiftRatio: input.maxGiftRatio ?? undefined,
+    } as Product;
+    products.push(row);
+    return delay(row);
+  },
+  update: (id: number, input: import('./backend').ProductInput) => {
+    const prod = products.find((x) => x.productId === id);
+    if (prod) Object.assign(prod, { ...input, maxGiftQty: input.maxGiftQty ?? undefined, maxGiftRatio: input.maxGiftRatio ?? undefined });
+    return delay({ ...prod } as Product);
+  },
   list: (p: ListParams) => paginate(products, p, ['name', 'code']),
   all: () => delay(products),
   tiers: (id: number) => delay(productTiers[id] ?? []),

@@ -8,6 +8,15 @@ let gid = 5000;
 const memberCount = (id: number) => customers.filter((c) => c.groupId === id).length;
 
 export const groupsApi = {
+  // 工商集团候选必须来自真实 API，Mock 不臆造
+  candidates: (_customerId: number) => delay({ enabled: false, failed: false, candidates: [] as { groupKeyNo: string; groupName: string }[] }),
+  attach: (customerId: number, input: { groupKeyNo: string; groupName: string }) => {
+    const groupId = ++gid;
+    groups.push({ groupId, name: input.groupName });
+    const c = customers.find((x) => x.customerId === customerId);
+    if (c) { c.groupId = groupId; c.groupName = input.groupName; }
+    return delay({ groupId, groupName: input.groupName });
+  },
   list: (): Promise<CustomerGroup[]> =>
     delay(groups.map((g) => ({ ...g, memberCount: memberCount(g.groupId) }))),
   create: (input: { name: string; matchKey?: string; refCompanyId?: string }) => {

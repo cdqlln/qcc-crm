@@ -7,6 +7,7 @@ import { useUI } from '@/store/ui';
 import { Button } from '@/components/ui/primitives';
 import { StatusTag } from '@/components/ui/StatusTag';
 import { Timeline } from '@/components/ui/Timeline';
+import { Attachments } from '@/components/ui/Attachments';
 import { formatDate } from '@/lib/format';
 import type { Contract } from '@/types';
 
@@ -94,6 +95,14 @@ export function ContractReviewTab({ contract }: { contract: Contract }) {
           )}
         </div>
       </div>
+
+      {/* 合同文件：新建合同时上传，供法务审核查阅 */}
+      {(contract.attachments?.length ?? 0) > 0 && (
+        <div className="rounded-lg border border-border p-3">
+          <div className="mb-1.5 text-sm font-medium text-text">合同文件（{contract.attachments!.length}）</div>
+          <Attachments items={contract.attachments} />
+        </div>
+      )}
 
       {/* 审核意见输入（送审附言 / 法务意见共用） */}
       {(rs === 0 || rs === 3 || (rs === 1 && can('contract.review'))) && (

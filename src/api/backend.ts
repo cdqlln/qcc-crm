@@ -172,10 +172,18 @@ export const paymentsApi = {
 export const invoicesApi = { list: (p: ListParams) => list<Invoice>('/invoices/list', p) };
 export const preCreditsApi = { list: (p: ListParams) => list<PreCredit>('/pre-credits/list', p) };
 
+/** 产品维护入参：maxGiftQty/maxGiftRatio 传 null 表示清除上限（不限） */
+export type ProductInput = Omit<Partial<Product>, 'maxGiftQty' | 'maxGiftRatio'> & {
+  maxGiftQty?: number | null;
+  maxGiftRatio?: number | null;
+};
+
 export const productsApi = {
   list: (p: ListParams) => list<Product>('/products/list', p),
   all: () => get<Product[]>('/products'),
   tiers: (id: number) => get<import('@/types').ProductTier[]>(`/products/${id}/tiers`),
+  create: (input: ProductInput) => post<Product>('/products', input),
+  update: (id: number, input: ProductInput) => put<Product>(`/products/${id}`, input),
 };
 
 export const tasksApi = {
@@ -329,6 +337,11 @@ export const orgApi = {
 import type { CustomerGroup } from '@/types';
 export const groupsApi = {
   list: () => get<CustomerGroup[]>('/customer-groups'),
+  // 工商所属集团候选（API 实时获取；多个默认第一个，可改选）
+  candidates: (customerId: number) =>
+    get<{ enabled: boolean; failed: boolean; candidates: { groupKeyNo: string; groupName: string }[] }>(`/customers/${customerId}/group-candidates`),
+  attach: (customerId: number, input: { groupKeyNo: string; groupName: string }) =>
+    post<{ groupId: number; groupName: string }>(`/customers/${customerId}/attach-group`, input),
   create: (input: { name: string; matchKey?: string; refCompanyId?: string }) => post<{ groupId: number; attached: number }>('/customer-groups', input),
   update: (id: number, input: { name: string; matchKey?: string }) => put(`/customer-groups/${id}`, input),
   remove: (id: number) => req(`/customer-groups/${id}`, { method: 'DELETE' }),
@@ -346,4 +359,57 @@ export const rolesApi = {
   setPermissions: (id: number, codes: string[]) => put(`/roles/${id}/permissions`, { codes }),
   usersRoles: () => get<UserRoles[]>('/users-roles'),
   setUserRoles: (userId: number, roleIds: number[]) => put(`/users/${userId}/roles`, { roleIds }),
+};
+
+// 商机开拓管理及分析（《商机开拓管理办法》）
+import type {
+  ProspectCampaign,
+  ProspectIcp,
+  ProspectList,
+  ProspectSignal,
+  ProspectStats,
+  ProspectTarget,
+  ProspectTouch,
+  WhitespaceData,
+} from '@/types';
+export const prospectingApi = {
+  // ICP 画像
+  icps: () => get<ProspectIcp[]>('/prospecting/icps'),
+  createIcp: (input: Partial<ProspectIcp>) => post<ProspectIcp>('/prospecting/icps', input),
+  updateIcp: (id: number, input: Partial<ProspectIcp>) => put<ProspectIcp>(`/prospecting/icps/${id}`, input),
+  // 作战名单
+  lists: (p: ListParams) => list<ProspectList>('/prospecting/lists/list', p),
+  createList: (input: { title: string; quarter: string; line: string; icpId?: number }) =>
+    post<ProspectList>('/prospecting/lists', input),
+  publishList: (id: number) => post<ProspectList>(`/prospecting/lists/${id}/publish`),
+  addTargets: (listId: number, items: { companyName: string; industry?: string; region?: string; qScore?: number; tScore?: number; signalNote?: string }[]) =>
+    post<{ added: number; skippedExistingCustomer: string[]; skippedDuplicate: string[] }>(`/prospecting/lists/${listId}/targets`, { items }),
+  // 名单目标
+  targets: (p: ListParams) => list<ProspectTarget>('/prospecting/targets/list', p),
+  claimTarget: (id: number) => post<ProspectTarget>(`/prospecting/targets/${id}/claim`),
+  touchTarget: (id: number, input: { method: string; content?: string; effective?: boolean }) =>
+    post<ProspectTarget>(`/prospecting/targets/${id}/touch`, input),
+  targetTouches: (id: number) => get<ProspectTouch[]>(`/prospecting/targets/${id}/touches`),
+  freezeTarget: (id: number, note?: string) => post<ProspectTarget>(`/prospecting/targets/${id}/freeze`, { note }),
+  unfreezeTarget: (id: number, note?: string) => post<ProspectTarget>(`/prospecting/targets/${id}/unfreeze`, { note }),
+  convertTarget: (id: number, input: { oppName?: string; estimatedAmount?: string; note?: string }) =>
+    post<ProspectTarget>(`/prospecting/targets/${id}/convert`, input),
+  // 信号雷达
+  signals: (p: ListParams) => list<ProspectSignal>('/prospecting/signals/list', p),
+  createSignal: (input: { type: number; title: string; detail?: string; companyName: string; targetId?: number; customerId?: number; ownerId?: number }) =>
+    post<ProspectSignal>('/prospecting/signals', input),
+  handleSignal: (id: number, input: { disposition: number; note?: string }) =>
+    post<ProspectSignal>(`/prospecting/signals/${id}/handle`, input),
+  // 白空间矩阵
+  whitespace: () => get<WhitespaceData>('/prospecting/whitespace'),
+  setWhitespace: (input: { customerId: number; productId: number; status: number | null; note?: string }) =>
+    put('/prospecting/whitespace', input),
+  // 开拓战役
+  campaigns: (p: ListParams) => list<ProspectCampaign>('/prospecting/campaigns/list', p),
+  createCampaign: (input: { name: string; quarter: string; line: string; scenarioCard?: string; goal?: string; ownerId?: number }) =>
+    post<ProspectCampaign>('/prospecting/campaigns', input),
+  updateCampaign: (id: number, input: Partial<Pick<ProspectCampaign, 'status' | 'kitList' | 'kitScript' | 'kitContent' | 'kitSignal' | 'reviewNote' | 'goal'>>) =>
+    put<ProspectCampaign>(`/prospecting/campaigns/${id}`, input),
+  // 开拓指标
+  stats: (quarter?: string) => get<ProspectStats>(`/prospecting/stats${quarter ? `?quarter=${encodeURIComponent(quarter)}` : ''}`),
 };

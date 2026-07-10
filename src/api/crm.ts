@@ -8,6 +8,7 @@ import * as mockRoles from './mockRoles';
 import * as mockOrg from './mockOrg';
 import * as mockAdmin from './mockAdmin';
 import * as mockGroups from './mockGroups';
+import * as mockProspecting from './mockProspecting';
 
 // VITE_API_BASE 已定义（含空串=同源 /api，配合 nginx 反代）即启用后端
 const USE_API = import.meta.env.VITE_API_BASE !== undefined;
@@ -44,6 +45,7 @@ export const integrationsApi = USE_API ? backend.integrationsApi : mockAdmin.int
 export const customFieldsApi = USE_API ? backend.customFieldsApi : mockAdmin.customFieldsApi;
 export const apiPricesApi = USE_API ? backend.apiPricesApi : mockAdmin.apiPricesApi;
 export const groupsApi = USE_API ? backend.groupsApi : mockGroups.groupsApi;
+export const prospectingApi = (USE_API ? backend.prospectingApi : mockProspecting.prospectingApi) as typeof backend.prospectingApi;
 
 // 分析页/弹窗就地聚合使用的内存数据集（始终来自 mock；接入后端后分析页可改为聚合接口）
 export {

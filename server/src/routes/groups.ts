@@ -4,6 +4,7 @@ import { one, query } from '../db.js';
 import { ah, ctx, fail, ok } from '../http.js';
 import { mapCustomer } from '../mappers.js';
 import { resolveGroup } from '../services/companyGraph.js';
+import { belongGroups, getQccCfg } from '../services/qcc.js';
 
 export const groupsRouter = Router();
 
@@ -28,6 +29,35 @@ export async function autoAttachGroup(orgId: number, customerId: number, name: s
   }
   return null;
 }
+
+// 工商所属集团候选（API 实时获取；多个时前端默认第一个，可改选）
+groupsRouter.get('/customers/:id/group-candidates', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const cust = await one<any>(`SELECT name FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+  if (!cust) return fail(res, '客户不存在', 1, 404);
+  const cfg = await getQccCfg(orgId);
+  if (!cfg.enabled) return ok(res, { enabled: false, candidates: [], failed: false });
+  const list = await belongGroups(orgId, cust.name);
+  if (list === undefined) return ok(res, { enabled: true, candidates: [], failed: true }); // 接口出错/风控，如实告知
+  ok(res, { enabled: true, candidates: list ?? [], failed: false });
+}));
+
+// 按选中的工商集团归集（find-or-create by ext_key）
+groupsRouter.post('/customers/:id/attach-group', ah(async (req, res) => {
+  const { orgId } = ctx(req);
+  const groupKeyNo = String(req.body?.groupKeyNo ?? '').trim();
+  const groupName = String(req.body?.groupName ?? '').trim();
+  if (!groupKeyNo || !groupName) return fail(res, '缺少集团标识/名称');
+  const cust = await one<any>(`SELECT customer_id FROM customer WHERE customer_id=$1 AND organization_id=$2`, [req.params.id, orgId]);
+  if (!cust) return fail(res, '客户不存在', 1, 404);
+  let g = await one<any>(`SELECT group_id, name FROM customer_group WHERE organization_id=$1 AND ext_key=$2`, [orgId, groupKeyNo]);
+  if (!g) {
+    g = await one<any>(`INSERT INTO customer_group (organization_id, name, ext_key) VALUES ($1,$2,$3) RETURNING group_id, name`,
+      [orgId, groupName, groupKeyNo]);
+  }
+  await one(`UPDATE customer SET group_id=$1, ext_key=$2 WHERE customer_id=$3 RETURNING customer_id`, [g.group_id, groupKeyNo, cust.customer_id]);
+  ok(res, { groupId: Number(g.group_id), groupName: g.name });
+}));
 
 // 集团列表（含成员数）
 groupsRouter.get('/customer-groups', ah(async (req, res) => {

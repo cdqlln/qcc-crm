@@ -186,6 +186,8 @@ export interface TrackingInput {
   nextTrackingDate?: string;
   priorityLevel?: number;
   attachments?: Attachment[];
+  businessType?: 0 | 1 | 3; // 来源：0线索 1客户 3商机
+  businessId?: number;      // 商机跟进=opportunityId
 }
 
 /** customer_tracking 跟进记录 */
@@ -202,6 +204,7 @@ export interface Tracking {
   attachments?: Attachment[];
   createBy: number;
   createDate: string;
+  sourceName?: string; // 商机跟进：商机名称（来源标注）
 }
 
 export interface Opportunity {
@@ -325,6 +328,7 @@ export interface Contract {
   approval: ApprovalStatus;
   changeApproval: ApprovalStatus;
   reviewStatus?: 0 | 1 | 2 | 3; // 法务审核：0未送审 1待审核 2通过 3驳回
+  attachments?: Attachment[]; // 合同文件（供法务审核）
   archive: boolean;
   leaderId?: number;
 }
@@ -436,6 +440,9 @@ export interface Product {
   cost: string;
   minDiscount: string;
   maxDiscount: string;
+  allowGift?: boolean;    // 赠送策略：是否允许赠送
+  maxGiftQty?: number;    // 每订单最大赠送数量（空=不限）
+  maxGiftRatio?: number;  // 赠送原价占订单金额上限 %（空=不限）
 }
 
 export interface ProductTier {
@@ -813,4 +820,148 @@ export interface ApiPriceImportResult {
   unchanged: number;
   changes: { apiCode: string; name: string; oldPrice: number; newPrice: number }[];
   fileName: string;
+}
+
+// ---- 商机开拓管理（《商机开拓管理办法》QCC-SALES-DEV-2026-005）----
+export interface ProspectIcp {
+  icpId: number;
+  name: string;             // 场景卡 / ICP 名称
+  line: string;             // 行业线（B线/G线/S线/区域…）
+  industryScope: string;
+  sizeRange: string;
+  qualifications: string;
+  exclusions: string;
+  version: string;
+  quarter: string;
+  tamCount: number;         // TAM 市场容量
+  stockCount?: number;      // 存量客户数（渗透率分子）
+  active: number;
+  updatedAt?: string;
+}
+
+export interface ProspectList {
+  listId: number;
+  icpId?: number | null;
+  icpName?: string;
+  title: string;
+  quarter: string;
+  line: string;
+  status: number;           // 1草稿 2已发布 3归档
+  publishedAt?: string | null;
+  createdAt: string;
+  targetCount?: number;
+  convertedCount?: number;
+}
+
+export interface ProspectTarget {
+  targetId: number;
+  listId: number;
+  listTitle?: string;
+  quarter?: string;
+  companyName: string;
+  industry: string;
+  region: string;
+  qScore: number;
+  tScore: number;
+  totalScore: number;
+  rankNo: number | null;
+  signalNote: string;
+  status: number;           // 1待承接 2跟进中 3已转商机 4冷冻 5已收回
+  ownerId: number | null;
+  ownerName?: string;
+  claimedAt?: string | null;
+  firstTouchDeadline?: string | null;
+  touchDeadline?: string | null;
+  touchCount: number;
+  effectiveTouchCount: number;
+  lastTouchAt?: string | null;
+  frozenUntil?: string | null;
+  customerId?: number | null;
+  opportunityId?: number | null;
+  resultNote: string;
+  opportunityCode?: string;
+}
+
+export interface ProspectTouch {
+  touchId: number;
+  method: string;
+  content: string;
+  effective: boolean;
+  userName: string;
+  createdAt: string;
+}
+
+export interface ProspectSignal {
+  signalId: number;
+  type: number;             // 1监管 2预算 3换约 4扩张
+  title: string;
+  detail: string;
+  companyName: string;
+  targetId?: number | null;
+  customerId?: number | null;
+  ownerId: number | null;
+  ownerName?: string;
+  dueAt: string;
+  status: number;           // 1待处置 2已处置
+  overdue: boolean;
+  disposition: number | null; // 1触达 2转商机 3误报 4暂缓
+  dispositionNote: string;
+  opportunityId?: number | null;
+  handledBy?: number | null;
+  handledAt?: string | null;
+  createdAt: string;
+}
+
+export interface ProspectCampaign {
+  campaignId: number;
+  name: string;
+  quarter: string;
+  line: string;
+  scenarioCard: string;
+  goal: string;
+  ownerId: number | null;
+  ownerName?: string;
+  status: number;           // 1立项 2进行中 3复盘 4结束
+  kitList: boolean;
+  kitScript: boolean;
+  kitContent: boolean;
+  kitSignal: boolean;
+  reviewNote: string;
+  startedAt?: string | null;
+  endedAt?: string | null;
+  createdAt: string;
+}
+
+export interface WhitespaceCell { status: number; note: string } // 2已验证需求 3跟进中 4已转商机
+export interface WhitespaceRow {
+  customerId: number;
+  customerName: string;
+  industry: string;
+  leaderName: string;
+  ownedProductIds: number[];
+  flags: Record<number, WhitespaceCell>;
+}
+export interface WhitespaceData {
+  products: { productId: number; code: string; name: string }[];
+  rows: WhitespaceRow[];
+  stats: { customerCount: number; multiSkuRatio: number; avgSku: number };
+}
+
+export interface ProspectStats {
+  quarter: string;
+  selfSourced: { prospectOpportunities: number; totalOpportunities: number; ratio: number; targetRatio: number };
+  listFunnel: {
+    total: number; claimed: number; touched: number; completed: number;
+    converted: number; frozen: number; recalled: number;
+    touchRate: number; convRate: number; touchRateTarget: number;
+  };
+  signals: {
+    total: number; handled: number; pendingOverdue: number;
+    timelyRate: number; timelyRateTarget: number;
+    precision: number; precisionTarget: number;
+    byType: { type: number; total: number; handled: number; timely: number; falsePositive: number; precision: number }[];
+  };
+  whitespace: { multiSkuRatio: number; avgSku: number; customersWithSku: number };
+  tam: { icpId: number; name: string; line: string; quarter: string; tamCount: number; stockCount: number; penetration: number }[];
+  campaigns: { total: number; running: number; reviewed: number };
 }

@@ -29,16 +29,21 @@ INSERT INTO permission (code, name, type, module, sort_order) VALUES
  ('system.audit','系统-日志审计',20,'系统',4)
 ON CONFLICT (code) DO UPDATE SET name=EXCLUDED.name, type=EXCLUDED.type, module=EXCLUDED.module, sort_order=EXCLUDED.sort_order;
 
--- 角色授权（role 1销售员 / 2销售主管 / 3管理员，见 seed_auth）
+-- 角色授权（role 1销售员 / 2销售主管 / 3管理员，见 seed.sql/seed_auth）
+-- 全新库上 role 由 seed 阶段创建（晚于 migrations），此处仅对存量库补授权；
+-- 全新库由 seed_auth.sql 中的同款授权兜底。
 -- 管理员：全部
 INSERT INTO role_permission (role_id, permission_id)
-SELECT 3, permission_id FROM permission ON CONFLICT DO NOTHING;
+SELECT 3, permission_id FROM permission WHERE EXISTS (SELECT 1 FROM role WHERE role_id=3)
+ON CONFLICT DO NOTHING;
 -- 销售主管：除系统类外全部
 INSERT INTO role_permission (role_id, permission_id)
-SELECT 2, permission_id FROM permission WHERE module <> '系统' ON CONFLICT DO NOTHING;
+SELECT 2, permission_id FROM permission WHERE module <> '系统' AND EXISTS (SELECT 1 FROM role WHERE role_id=2)
+ON CONFLICT DO NOTHING;
 -- 销售员：核心查看 + 线索编辑/分配 + 报价编辑
 INSERT INTO role_permission (role_id, permission_id)
 SELECT 1, permission_id FROM permission
 WHERE code IN ('lead.view','lead.edit','lead.assign','lead.export','customer.view','customer.edit',
                'opportunity.view','opportunity.edit','quotation.view','quotation.edit','contract.view','finance.view')
+  AND EXISTS (SELECT 1 FROM role WHERE role_id=1)
 ON CONFLICT DO NOTHING;

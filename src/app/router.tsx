@@ -9,6 +9,7 @@ import { CustomersPage } from '@/features/customers/CustomersPage';
 import { CustomerDetailPage } from '@/features/customers/CustomerDetailPage';
 import { OpportunitiesPage } from '@/features/opportunities/OpportunitiesPage';
 import { QuotationsPage } from '@/features/quotations/QuotationsPage';
+import { ProspectingPage } from '@/features/prospecting/ProspectingPage';
 import { QuotationEditorPage } from '@/features/quotations/QuotationEditorPage';
 import { ContractsPage } from '@/features/contracts/ContractsPage';
 import { ContractDetailPage } from '@/features/contracts/ContractDetailPage';
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
       { path: 'customers/:id', element: <CustomerDetailPage /> },
       { path: 'opportunities', element: <OpportunitiesPage /> },
       { path: 'opportunities/:id', element: <OpportunitiesPage /> },
+      { path: 'prospecting', element: <ProspectingPage /> },
       { path: 'quotations', element: <QuotationsPage /> },
       { path: 'quotations/:id', element: <QuotationEditorPage /> },
       { path: 'contracts', element: <ContractsPage /> },
