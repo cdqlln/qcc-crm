@@ -820,6 +820,8 @@ export interface ApiPriceImportResult {
   unchanged: number;
   changes: { apiCode: string; name: string; oldPrice: number; newPrice: number }[];
   fileName: string;
+}
+
 // ---- 商机开拓管理（《商机开拓管理办法》QCC-SALES-DEV-2026-005）----
 export interface ProspectIcp {
   icpId: number;
